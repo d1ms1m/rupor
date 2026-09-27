@@ -1,0 +1,1102 @@
+{
+  "app": {
+    "name": "Rupor",
+    "tagline": "Voice typing"
+  },
+  "nav": {
+    "home": "Home",
+    "history": "History",
+    "dictionary": "Dictionary",
+    "snippets": "Snippets",
+    "styles": "Styles",
+    "apps": "App rules",
+    "settings": "Settings",
+    "help": "Help"
+  },
+  "state": {
+    "offline": "Engine offline",
+    "idle": "Ready to dictate",
+    "recording": "Recording",
+    "hands_free": "Recording hands-free",
+    "processing": "Transcribing…",
+    "ai": "AI cleanup…",
+    "paused": "Paused",
+    "loading": "Loading model",
+    "error": "Engine error"
+  },
+  "status": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "gpu": "GPU",
+    "cpu": "CPU",
+    "noModel": "Model not loaded",
+    "aiOn": "AI on",
+    "aiOff": "AI off",
+    "admin": "Administrator"
+  },
+  "mock": {
+    "simulate": "Demo: simulate dictation",
+    "badge": "Demo mode"
+  },
+  "errors": {
+    "noParams": "No engine connection parameters",
+    "timeout": "The engine didn't respond in time",
+    "connectionLost": "Lost connection to the engine",
+    "unknown": "Unknown error",
+    "settingsLoad": "Couldn't load settings",
+    "settingsSave": "Couldn't save the setting",
+    "generic": "Something went wrong",
+    "load": "Couldn't load data",
+    "copy": "Couldn't copy",
+    "save": "Couldn't save",
+    "autostart": "Couldn't change the startup setting"
+  },
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "clear": "Clear",
+    "copied": "Copied",
+    "undo": "Undo",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "add": "Add",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "nothingFound": "Nothing found"
+  },
+  "conn": {
+    "lost": "Lost connection to the engine — reconnecting…",
+    "modelLoading": "Loading the speech model — dictation will be ready in a few seconds",
+    "modelDownloading": "Downloading the speech model…",
+    "noModel": "Speech model isn't downloaded",
+    "noModelHint": "Dictation needs it. About 1.6 GB, downloaded once.",
+    "modelFailed": "The speech model failed to load",
+    "modelFailedHint": "Dictation is unavailable. Try again — the logs have the details.",
+    "downloadModel": "Download model",
+    "downloadError": "Couldn't start the model download",
+    "openLogs": "Logs",
+    "connecting": "Starting the engine…",
+    "reconnecting": "Reconnecting to the engine…",
+    "slow": "The engine is taking longer than usual. On first launch it may still be loading the model — give it a moment."
+  },
+  "noParams": {
+    "title": "Not connected to the engine",
+    "text": "The interface is open in a regular browser. Add the port and token of an engine started with --sidecar to the URL, or open demo mode with sample data.",
+    "mock": "Open demo mode"
+  },
+  "notice": {
+    "relaunchAdmin": "Restart as administrator",
+    "openAiSettings": "Open AI settings",
+    "openRdpSettings": "Choose sessions"
+  },
+  "tray": {
+    "aiLine": "AI: today {today} · balance {balance}",
+    "aiLineToday": "AI: today {today}",
+    "status": {
+      "loading": "Loading model…",
+      "idle": "Ready",
+      "recording": "Recording",
+      "hands_free": "Recording hands-free",
+      "processing": "Transcribing…",
+      "ai": "AI cleanup…",
+      "paused": "Paused",
+      "error": "Error",
+      "starting": "Starting engine…",
+      "restarting": "Restarting engine…",
+      "failed": "Engine won't start",
+      "already_running": "Another Rupor is already running"
+    },
+    "pause": "Pause",
+    "insertMode": "Insert method",
+    "modeType": "Type as keystrokes",
+    "modeClipboard": "Paste via clipboard",
+    "style": "Style",
+    "lastInsert": "Paste last",
+    "rdp": "Broadcast to RDP",
+    "rdpEmpty": "No open RDP sessions",
+    "open": "Open Rupor",
+    "quit": "Quit"
+  },
+  "learn": {
+    "undo": "Undo",
+    "add": "Add",
+    "undone": "Undone",
+    "added": "Added",
+    "addedToast": "Added to dictionary: {term}",
+    "undoneTerm": "Undone — {term} removed from the dictionary",
+    "undoneVariant": "Undone — “{variant}” removed from {term}",
+    "failed": "Didn't work: {error}",
+    "undoFailed": "Couldn't undo",
+    "addFailed": "Couldn't add to the dictionary",
+    "modes": {
+      "auto": "Add automatically",
+      "suggest": "Ask first",
+      "off": "Off"
+    }
+  },
+  "time": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "ms": "{n} ms",
+    "sec": "{n} s",
+    "min": "{n} min",
+    "minSec": "{m} min {s} s",
+    "hour": "{n} h",
+    "hourMin": "{h} h {m} min",
+    "justNow": "just now",
+    "minAgo": "{n} min ago",
+    "hourAgo": "{n} h ago"
+  },
+  "units": {
+    "words": { "one": "{n} word", "other": "{n} words" },
+    "dictations": { "one": "{n} dictation", "other": "{n} dictations" },
+    "dictationsTotal": {
+      "one": "{n} dictation all time",
+      "other": "{n} dictations all time"
+    },
+    "days": { "one": "{n} day", "other": "{n} days" },
+    "chars": { "one": "{n} character", "other": "{n} characters" },
+    "terms": { "one": "{n} term", "other": "{n} terms" },
+    "snippets": { "one": "{n} snippet", "other": "{n} snippets" },
+    "calls": { "one": "{n} request", "other": "{n} requests" }
+  },
+  "keys": {
+    "none": "Not set",
+    "rctrl": "Right Ctrl",
+    "lctrl": "Left Ctrl",
+    "rshift": "Right Shift",
+    "lshift": "Left Shift",
+    "ralt": "Right Alt",
+    "lalt": "Left Alt",
+    "rwin": "Right Win",
+    "lwin": "Left Win",
+    "esc": "Esc",
+    "capslock": "Caps Lock",
+    "scrolllock": "Scroll Lock",
+    "pause": "Pause",
+    "insert": "Insert",
+    "numpad": "Num {n}",
+    "vk": "Key {code}",
+    "ctrl": "Ctrl",
+    "alt": "Alt",
+    "shift": "Shift",
+    "win": "Win",
+    "space": "Space",
+    "enter": "Enter",
+    "tab": "Tab",
+    "backspace": "Backspace",
+    "delete": "Delete",
+    "home": "Home",
+    "end": "End",
+    "pageup": "Page Up",
+    "pagedown": "Page Down",
+    "left": "←",
+    "up": "↑",
+    "right": "→",
+    "down": "↓"
+  },
+  "hotkeys": {
+    "pressKey": "Press a key…",
+    "pressKeyOrCombo": "Press a key or combination…",
+    "pressChord": "Press a shortcut…",
+    "record": "Record shortcut",
+    "off": "Off",
+    "disable": "Turn off shortcut"
+  },
+  "insertModes": {
+    "auto": "Auto",
+    "type": "Keystrokes",
+    "clipboard": "Clipboard"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Good morning",
+      "day": "Good afternoon",
+      "evening": "Good evening",
+      "night": "Working late?"
+    },
+    "todaySummary": "You've dictated {words} today — typing that would have taken about {minutes}.",
+    "todayEmpty": "No dictations yet today. Hold {key} and speak — the text appears wherever your cursor is.",
+    "kpi": {
+      "today": "Words today",
+      "week": "This week",
+      "weekFoot": "{avg} a day on average",
+      "total": "Total words",
+      "totalFoot": "≈ {pages} pages of text",
+      "wpm": "Speed",
+      "wpmUnit": "wpm",
+      "wpmFoot": "{x}× faster than typing",
+      "saved": "Time saved",
+      "savedFoot": "vs. typing at 40 wpm",
+      "streak": "Streak",
+      "streakFoot": "in a row",
+      "streakZero": "dictate something today"
+    },
+    "chart": {
+      "title": "Words over 30 days",
+      "summary": "{total} words in this period · {avg} per active day on average",
+      "emptyTitle": "No data yet",
+      "emptyText": "The chart appears after your first dictations."
+    },
+    "recent": {
+      "title": "Recent dictations",
+      "all": "All history",
+      "emptyTitle": "No dictations yet",
+      "emptyText": "Your latest dictated phrases will show up here."
+    },
+    "hotkeys": {
+      "title": "Shortcuts",
+      "hold": "Hold to talk",
+      "handsFree": "Hands-free",
+      "broadcast": "Broadcast to RDP",
+      "command": "Command mode",
+      "cancel": "Cancel recording",
+      "insertLast": "Paste last",
+      "copyLast": "Copy last"
+    },
+    "system": {
+      "title": "Status",
+      "model": "Model",
+      "device": "Acceleration",
+      "cpu": "CPU (slower)",
+      "notLoaded": "Model not loaded",
+      "ai": "AI cleanup",
+      "aiOff": "Off",
+      "balance": "OpenRouter balance",
+      "balanceUnknown": "Unknown"
+    }
+  },
+  "history": {
+    "title": "History",
+    "subtitle": "Every dictation — searchable and ready to insert again — plus a draft for longer notes.",
+    "tabs": {
+      "feed": "Timeline",
+      "draft": "Draft"
+    },
+    "search": "Search text and apps",
+    "clear": {
+      "button": "Clear",
+      "periods": {
+        "day": "Last 24 hours",
+        "week": "Last 7 days",
+        "month": "Last 30 days",
+        "all": "All history"
+      },
+      "confirm": {
+        "day": "Delete dictations from the last 24 hours?",
+        "week": "Delete dictations from the last 7 days?",
+        "month": "Delete dictations from the last 30 days?",
+        "all": "Delete all history?"
+      },
+      "body": "These entries will be deleted permanently. Your stats on Home are kept.",
+      "action": "Delete",
+      "done": {
+        "one": "Deleted {n} entry",
+        "other": "Deleted {n} entries"
+      }
+    },
+    "disabled": "History is off — new dictations won't show up here.",
+    "disabledAction": "Turn on",
+    "total": {
+      "one": "{n} entry",
+      "other": "{n} entries"
+    },
+    "found": {
+      "one": "{n} result",
+      "other": "{n} results"
+    },
+    "emptySearch": {
+      "title": "Nothing found",
+      "text": "No dictations match “{q}”. Try another word."
+    },
+    "empty": {
+      "title": "Your dictations will show up here",
+      "text": "Put the cursor in any field, hold",
+      "textAfter": "and speak"
+    },
+    "end": "That's everything",
+    "moreError": "Couldn't load older dictations",
+    "reinserted": "Text inserted into the last active window",
+    "expand": "Show more",
+    "collapse": "Show less",
+    "processed": "Cleaned up",
+    "raw": "Raw",
+    "badges": {
+      "ai": "AI",
+      "rdpAll": "RDP broadcast",
+      "command": "Command",
+      "test": "Test"
+    },
+    "actions": {
+      "copy": "Copy",
+      "reinsert": "Insert again",
+      "delete": "Delete"
+    },
+    "draft": {
+      "hint": "Dictate right here: click into the field and hold",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveError": "Couldn't save",
+      "clear": "Clear",
+      "clearTitle": "Clear the draft?",
+      "clearBody": "All text in the draft will be deleted.",
+      "copyAll": "Copy all",
+      "placeholder": "Start dictating or typing — the draft saves automatically…"
+    }
+  },
+  "dictionary": {
+    "title": "Dictionary",
+    "subtitle": "Terms and their variants: Rupor turns “click house” into “ClickHouse” and primes speech recognition with the words you need.",
+    "add": "Add term",
+    "tabs": {
+      "terms": "Terms",
+      "vocab": "Frequent words"
+    },
+    "search": "Search terms and variants",
+    "termRequired": "Enter a term",
+    "deleted": "Term “{term}” deleted",
+    "empty": {
+      "title": "Your dictionary is empty",
+      "text": "Add names and terms that recognition gets wrong — like ClickHouse or Metabase."
+    },
+    "notFound": "No terms match “{q}”.",
+    "noVariants": "No variants — recognition hint only",
+    "term": "Term",
+    "termPlaceholder": "ClickHouse",
+    "variants": "How it might be recognized",
+    "variantsPlaceholder": "click house, clickhouse… Press Enter after each",
+    "editorHint": "Enter to save (or to add the variant you're typing) · Ctrl+Enter to save now · Esc to cancel",
+    "learn": {
+      "title": "Learn from your corrections",
+      "text": "Fixed a word right after it was inserted — say, “meta base” to Metabase? Rupor saves the fix to the dictionary, so next time the word comes out right.",
+      "hints": {
+        "auto": "The fix goes straight into the dictionary, and the indicator shows what was added — with an Undo button.",
+        "suggest": "The indicator asks whether to add the fix. Correct the same word a second time and Rupor adds it on its own, then shows what was added.",
+        "off": "Rupor doesn't watch for corrections — only you add words to the dictionary."
+      },
+      "example": "Here's how it looks in the indicator",
+      "exampleTerm": "Metabase",
+      "exampleVariant": "meta base",
+      "exampleAuto": "Added to dictionary: “{variant}” → {term}",
+      "exampleSuggest": "Add to dictionary: “{variant}” → {term}?",
+      "privacy": "Rupor reads only the field it inserted text into, and only for 1 minute after inserting. Doesn't work in RDP windows."
+    }
+  },
+  "snippets": {
+    "title": "Snippets",
+    "subtitle": "Voice shortcuts: say a short phrase and get ready-made text.",
+    "add": "Add snippet",
+    "search": "Search snippets",
+    "required": "Fill in both the phrase and the text",
+    "deleted": "Snippet “{trigger}” deleted",
+    "exampleTrigger": "signature",
+    "howto": "Say “{trigger}” as a phrase of its own and the snippet text is inserted instead. The trigger is replaced inside longer phrases too.",
+    "empty": {
+      "title": "No snippets yet",
+      "text": "Create a template for text you use often: “my email”, “signature”, “office address”."
+    },
+    "notFound": "No snippets match “{q}”.",
+    "trigger": "Voice phrase",
+    "triggerPlaceholder": "my email",
+    "text": "Text to insert",
+    "textPlaceholder": "jane@example.com",
+    "editorHint": "Ctrl+Enter to save · Esc to cancel"
+  },
+  "transfer": {
+    "import": "Import",
+    "export": "Export",
+    "exported": "Export saved to Downloads",
+    "exportError": "Couldn't export data",
+    "invalidJson": "This file isn't valid JSON",
+    "empty": "The file has no terms or snippets",
+    "readError": "Couldn't read the file",
+    "title": "Import dictionary and snippets",
+    "confirm": "Import",
+    "merge": "Add to existing",
+    "mergeHint": "New entries are added, matching ones are updated.",
+    "replace": "Replace everything",
+    "replaceHint": "Your current dictionary and snippets will be deleted.",
+    "done": "Import complete",
+    "doneText": "Dictionary: {dict}, snippets: {snippets}",
+    "importError": "Couldn't import"
+  },
+  "styles": {
+    "default": "Default",
+    "title": "Styles",
+    "subtitle": "How AI formats your dictated text. The default style applies everywhere except apps with rules of their own.",
+    "aiOff": {
+      "title": "AI cleanup is off",
+      "text": "Right now only the dictionary and snippets apply. Styles kick in once AI is on.",
+      "action": "Set up AI"
+    },
+    "defaultTitle": "Default style",
+    "defaultHint": "Choose how to format text when an app has no rule of its own.",
+    "isDefault": "Default",
+    "examples": {
+      "as_is": "uh let's hop on a call tomorrow at like eleven",
+      "normal": "Let's hop on a call tomorrow at 11.",
+      "business": "Could we schedule a call for tomorrow at 11:00?",
+      "messenger": "let's call tomorrow at 11",
+      "code": "Rename get_user_stats() to fetch_user_stats()."
+    },
+    "mode": {
+      "title": "When to insert text",
+      "hint": "AI replies in about 2 seconds — choose whether to wait for it or insert right away.",
+      "wait": "Wait for cleanup",
+      "waitText": "The indicator shows progress and only the cleaned-up text lands in the window. If AI doesn't reply within the timeout, the raw text is inserted.",
+      "rawFirst": "Raw text first",
+      "rawFirstText": "Text is inserted immediately, then swapped for the cleaned-up version when it arrives — as long as you haven't pressed anything since."
+    },
+    "sandbox": {
+      "title": "Try it on your own text",
+      "hint": "Paste a raw transcript and see how the selected style formats it. Each run costs a little balance.",
+      "input": "Raw text",
+      "useSample": "Use a sample",
+      "sample": "um so basically tomorrow we need to uh rebuild that merchant fees table in click house you know and also update the dashboard in meta base so let's sync at ten no wait eleven and first check plan versus actual and second like see where the gaps are",
+      "placeholder": "For example: um so tomorrow we need to uh update the dashboard in meta base…",
+      "run": "Run",
+      "shortcut": "Ctrl+Enter",
+      "output": "Result",
+      "costUnknown": "price unknown"
+    }
+  },
+  "apps": {
+    "title": "App rules",
+    "subtitle": "A custom insert method and style for specific apps and windows. Everything else uses the defaults.",
+    "add": "Add app",
+    "defaultValue": "Default",
+    "presets": {
+      "title": "Recommended rules",
+      "hint": "Ready-made styles for popular apps — in one click.",
+      "applyAll": "Apply all",
+      "appliedAll": "Recommended rules added",
+      "apply": "Add",
+      "applied": "Added",
+      "telegram": {
+        "title": "Telegram",
+        "text": "Chat message style: short and casual, without the formality."
+      },
+      "outlook": {
+        "title": "Outlook",
+        "text": "Business style for email — in both classic and new Outlook."
+      },
+      "code": {
+        "title": "Cursor and VS Code",
+        "text": "Code and prompt style: terms, snake_case and function names stay exactly as they are."
+      }
+    },
+    "rulesTitle": "Your rules",
+    "empty": {
+      "title": "No rules yet",
+      "text": "Add an app to give it its own insert method or style."
+    },
+    "cols": {
+      "app": "App",
+      "mode": "Insert method",
+      "style": "Style"
+    },
+    "dialog": {
+      "title": "Add app",
+      "recent": "Recently active",
+      "noRecent": "Rupor hasn't seen any other windows yet. Switch to the app you need and refresh the list.",
+      "manual": "Or enter a process name",
+      "manualPlaceholder": "notepad.exe"
+    }
+  },
+  "key": {
+    "stored": "Key saved in Windows Credential Manager",
+    "missing": "No key set",
+    "storeHint": "Stored only in Windows Credential Manager",
+    "check": "Check",
+    "replace": "Replace",
+    "enter": "Enter manually",
+    "imported": "Key imported",
+    "notInEnv": "The .env file has no openrouter_api_key variable",
+    "importError": "Couldn't import the key",
+    "saved": "Key saved",
+    "saveError": "Couldn't save the key",
+    "deleteTitle": "Delete the key?",
+    "deleteBody": "The key will be removed from Credential Manager. AI cleanup stops working until you add a new one.",
+    "balance": "Balance",
+    "usage": "Spent",
+    "limit": "Key limit",
+    "noLimit": "no limit",
+    "invalid": "The key didn't pass the check",
+    "placeholderOpenrouter": "sk-or-v1-…",
+    "placeholderAnthropic": "sk-ant-…",
+    "manualHint": "The key goes straight to Credential Manager and is never shown again.",
+    "envTitle": "Import from a .env file",
+    "envPlaceholder": "Path to a .env with openrouter_api_key (optional)",
+    "importEnv": "Import",
+    "envHint": "Optional: point to a .env file — Rupor reads the openrouter_api_key variable and saves the key to Credential Manager."
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Changes apply instantly — no restart needed.",
+    "tabs": {
+      "general": "General",
+      "dictation": "Dictation",
+      "insert": "Insertion",
+      "ai": "AI",
+      "history": "History",
+      "about": "About"
+    },
+    "accents": {
+      "violet": "Violet",
+      "blue": "Blue",
+      "teal": "Teal",
+      "green": "Green",
+      "amber": "Amber",
+      "orange": "Orange",
+      "pink": "Pink",
+      "graphite": "Graphite"
+    },
+    "general": {
+      "language": "Language",
+      "uiLanguage": "Interface language",
+      "uiLanguageHint": "“System” follows the Windows display language (currently {lang}). Switches instantly.",
+      "uiLanguageSystem": "System",
+      "dictationLanguage": "Dictation language",
+      "dictationLanguageAuto": "Auto",
+      "dictationLanguageHints": {
+        "auto": "Russian or English, detected for each phrase. The interface language wins unless recognition is confident about the other one.",
+        "ru": "Always Russian, no language detection.",
+        "en": "Always English, no language detection."
+      },
+      "startup": "Startup",
+      "autostart": "Start with Windows",
+      "autostartHint": "Rupor starts in the tray when you sign in.",
+      "onlyInApp": "Only available in the installed app.",
+      "appearance": "Appearance",
+      "theme": "Theme",
+      "themeHint": "System follows your Windows settings.",
+      "themes": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "accent": "Accent color",
+      "accentHint": "Buttons, highlights and the indicator waveform.",
+      "customColor": "Custom color",
+      "feedback": "Indicator & sounds",
+      "pill": "Show indicator",
+      "pillHint": "A floating indicator at the bottom of the screen: recording, processing, errors.",
+      "pillPosition": "Indicator position",
+      "pillPositionHint": "You've moved the indicator. You can put it back at the bottom center.",
+      "pillReset": "Reset to center",
+      "sounds": "Recording sounds",
+      "soundsHint": "A soft chime when recording starts and stops."
+    },
+    "dictation": {
+      "hotkeys": "Shortcuts",
+      "hotkeysHint": "They work in any window, including full-screen RDP.",
+      "ptt": "Hold to talk",
+      "pttHint": "Hold to record, release to insert the text. Double-press for hands-free mode.",
+      "broadcast": "Broadcast to RDP sessions",
+      "broadcastHint": "Hold together with the main key — the text goes to the selected RDP sessions (Insertion → “Broadcast sessions”).",
+      "command": "Command mode",
+      "commandHint": "Hold together with the main key and say what to do with the selected text.",
+      "cancel": "Cancel recording",
+      "cancelHint": "Press while recording — nothing gets inserted.",
+      "insertLast": "Paste last",
+      "insertLastHint": "Inserts the last transcribed text into the active window.",
+      "copyLast": "Copy last",
+      "copyLastHint": "Puts the last transcribed text on the clipboard.",
+      "chordSaved": "Shortcut “{key}” saved",
+      "chordOff": "Shortcut turned off",
+      "keySaved": "Key “{key}” saved",
+      "conflict": "“{key}” is assigned to two actions — one of them won't work.",
+      "doubleTap": "Double-press interval",
+      "doubleTapHint": "How long to wait for the second press that starts hands-free mode.",
+      "mouse": "Mouse button",
+      "mouseHint": "Hold it to record for as long as you hold. A short click starts hands-free, the next one stops. The button no longer works as Back in your browser.",
+      "mouseOptions": {
+        "off": "Don't use",
+        "middle": "Wheel (middle)",
+        "x1": "Side “Back” (4)",
+        "x2": "Side “Forward” (5)"
+      },
+      "mic": "Microphone",
+      "micDevice": "Input device",
+      "micHint": "Speak — the meter below should move.",
+      "micDefault": "System default",
+      "micSystem": "Windows default microphone",
+      "micMissing": "not connected right now",
+      "level": "Input level",
+      "levelHint": "Green is good, red is too loud.",
+      "asr": "Recognition",
+      "asrHint": "Changing the model or device reloads the model in the background.",
+      "model": "Model",
+      "modelHint": "Bigger is more accurate, but slower and heavier on video memory.",
+      "models": {
+        "large_v3_turbo": "best balance of speed and accuracy",
+        "large_v3": "more accurate on hard speech, 2–3× slower",
+        "medium": "faster, a bit worse with terms",
+        "small": "for low-end PCs"
+      },
+      "device": "Device",
+      "deviceHint": "An NVIDIA graphics card (CUDA) or the CPU. If CUDA fails, Rupor switches to the CPU on its own.",
+      "gpu": "GPU",
+      "cpu": "CPU",
+      "precision": "Compute precision",
+      "precisionHint": "float16 for the GPU, int8 for the CPU.",
+      "precisions": {
+        "float16": "GPU, default",
+        "int8_float16": "GPU, less memory",
+        "int8": "CPU"
+      },
+      "beam": "Recognition mode",
+      "beamHint": "“Accurate” weighs more candidates; “Fast” saves tens of milliseconds.",
+      "beamAccurate": "Accurate",
+      "beamFast": "Fast",
+      "unload": "Unload model from memory",
+      "unloadHint": "Frees video memory when idle. The first dictation after unloading takes longer.",
+      "unloadNever": "Never",
+      "unloadAfter": "After {n} min idle",
+      "terms": "Hint terms",
+      "termsHint": "Words recognition should expect. Dictionary terms are added automatically.",
+      "termsPlaceholder": "Add a term and press Enter",
+      "learn": "Learn from your corrections",
+      "learnHint": "A word you fix right after insertion goes into the dictionary. Rupor reads only the field it inserted into, for 1 minute after inserting; doesn't work in RDP windows.",
+      "learnOpen": "Open dictionary",
+      "hints": "Recognition hints",
+      "hintsHint": "Your frequent words and 1–2 sentences before the cursor help get names and terms right.",
+      "hintsOpen": "Frequent words",
+      "duck": {
+        "title": "Computer audio while recording",
+        "hint": "Music, videos and people on a call fade while you talk and come back when recording ends.",
+        "mode": "Other apps' audio",
+        "modes": {
+          "off": "Leave as is",
+          "duck": "Lower",
+          "mute": "Mute"
+        },
+        "modeHints": {
+          "off": "Everything plays as usual while recording.",
+          "duck": "Apps play quieter, then return to normal after recording.",
+          "mute": "Audio is muted while recording and restored afterwards."
+        },
+        "level": "Volume while recording",
+        "levelHint": "A share of each app's previous volume: music at 80% will play at {n}%. 0% means silence.",
+        "levelValue": "{n}%",
+        "note": "Rupor's own sounds and Windows system sounds aren't lowered; audio from a remote computer over RDP is. If you change an app's volume yourself while recording, Rupor leaves it alone. If Rupor closes mid-recording, the volume is restored the next time it starts."
+      }
+    },
+    "insert": {
+      "mode": "Insert method",
+      "modeHint": "App rules can override this choice.",
+      "recommended": "Recommended",
+      "modes": {
+        "auto": "Keystrokes in RDP windows, clipboard everywhere else.",
+        "type": "Character by character via SendInput. Works in RDP without a clipboard and with any keyboard layout.",
+        "clipboard": "Instant via Ctrl+V; your clipboard is restored afterwards."
+      },
+      "typing": "Keystrokes",
+      "typeDelay": "Delay between characters",
+      "typeDelayHint": "For regular windows. Increase it if an app drops letters.",
+      "rdpDelay": "Delay in RDP",
+      "rdpDelayHint": "For RDP windows. Slow sessions work better with a pause of a few milliseconds.",
+      "trailingSpace": "Space after inserting",
+      "trailingSpaceHint": "Handy when you dictate several phrases in a row.",
+      "rdpDetect": "How RDP windows are detected",
+      "rdpDetectHint": "Windows of these classes and processes are treated as remote sessions.",
+      "rdpClasses": "Window classes",
+      "rdpClassesHint": "mstsc uses TscShellContainerClass.",
+      "rdpProcesses": "Processes",
+      "rdpProcessesHint": "Clients like mRemoteNG and RDCMan.",
+      "sessions": "Broadcast sessions",
+      "sessionsHint": "Broadcasts go only to selected sessions: with {key}, the text is typed into every selected open session.",
+      "sessionsChecked": "{n} of {total} selected",
+      "noSessions": "No RDP windows are open right now",
+      "noSessionsHint": "Open a connection — it shows up here and you can select it. The selection is remembered by server name.",
+      "included": "Included",
+      "closed": "Not open",
+      "closedHint": "Selected but closed right now — it'll get the text once it opens",
+      "noneChecked": "No open session is selected — broadcast text won't go anywhere (you can still insert it with “Paste last”).",
+      "checkAll": "Select all"
+    },
+    "ai": {
+      "enable": "AI text cleanup",
+      "enableHint": "Removes filler words, fixes punctuation and formats text to the style. Without AI everything works offline.",
+      "provider": "Provider",
+      "providerHint": "Only the selected provider is contacted over the network.",
+      "providers": {
+        "openrouter": "OpenRouter",
+        "anthropic": "Anthropic",
+        "ollama": "Ollama (offline)"
+      },
+      "key": "API key",
+      "keyHint": "Your OpenRouter key. Never shown in the interface, logs or history.",
+      "keyHintAnthropic": "An Anthropic API key for direct requests without OpenRouter.",
+      "model": "Model",
+      "modelHint": "A pinned version, not a “latest” alias.",
+      "anthropicModelHint": "Model name in the Anthropic API.",
+      "order": "Preferred OpenRouter provider",
+      "orderHint": "Provider order for requests (provider.order). Through Amazon Bedrock, replies take about 2 seconds.",
+      "orderPlaceholder": "amazon-bedrock",
+      "orderSuggest": "Add:",
+      "ollamaUrl": "Ollama address",
+      "ollamaUrlHint": "Your local Ollama server.",
+      "ollamaModelHint": "A model you've pulled into Ollama.",
+      "behavior": "Behavior",
+      "behaviorHint": "AI leaves short phrases alone — they're inserted instantly.",
+      "minWords": "Minimum words for AI",
+      "minWordsHint": "Shorter phrases aren't sent to AI.",
+      "timeout": "Response timeout",
+      "timeoutHint": "If AI is too slow, the raw text is inserted. Text is never lost.",
+      "command": "Command mode",
+      "commandHint": "Select text, hold {keys} and say what to do: “make it more polite”, “translate to German”.",
+      "commandOpenrouter": "OpenRouter",
+      "commandOpenrouterText": "The same model and key as cleanup.",
+      "commandCli": "Claude Code CLI",
+      "commandCliText": "The local “claude -p” command, 30-second timeout."
+    },
+    "history": {
+      "title": "Dictation history",
+      "enabled": "Keep history",
+      "enabledHint": "Stats on Home are always counted, even with history off.",
+      "retention": "Keep entries for",
+      "retentionHint": "Older entries are deleted automatically.",
+      "forever": "Forever",
+      "clear": "Clear history",
+      "clearHint": "Delete entries from the last day, week, month, or everything at once.",
+      "openHistory": "Open history"
+    },
+    "about": {
+      "tagline": "Local voice dictation into any Windows app, including RDP.",
+      "coreVersion": "Engine {v}",
+      "uiVersion": "Interface {v}",
+      "rights": "Permissions",
+      "elevated": "Rupor is running as administrator and can type into any window.",
+      "notElevated": "Standard permissions. Windows won't let Rupor type into windows running as administrator.",
+      "logs": "Logs",
+      "logsHint": "%APPDATA%\\Rupor\\logs — handy if something goes wrong. API keys are never written there.",
+      "openLogs": "Open folder",
+      "wizard": "Setup wizard",
+      "wizardHint": "Go through microphone, model, shortcut and AI setup again.",
+      "runWizard": "Run",
+      "privacy": "Privacy",
+      "privacyHint": "No telemetry. Speech recognition runs on your computer; only text for AI cleanup goes online, and only if it's on.",
+      "quit": "Quit Rupor",
+      "quitHint": "Fully close the app and the speech engine.",
+      "quitTitle": "Quit Rupor?",
+      "quitBody": "Shortcuts will stop working until you start it again.",
+      "footer": "Built for fast dictation — no clipboard or cloud required"
+    }
+  },
+  "help": {
+    "title": "Help",
+    "subtitle": "How to dictate, which modes there are, and what to do if something doesn't work.",
+    "howTitle": "How it works",
+    "steps": {
+      "s1": "Place the cursor",
+      "s1Text": "In any field: a messenger, email, an IDE, an RDP session window.",
+      "s2": "Hold and speak",
+      "s2Text": "While the key is held, Rupor records — the indicator shows the waveform.",
+      "s3": "Release",
+      "s3Text": "A split second later the text appears where your cursor was."
+    },
+    "hotkeysTitle": "Shortcuts",
+    "hotkeysHint": "Change keys in Settings → Dictation.",
+    "hotkeys": {
+      "hold": "Hold to talk",
+      "holdText": "Short presses and combos like Ctrl+C don't start dictation.",
+      "handsFree": "Hands-free",
+      "handsFreeText": "Double-press and recording runs on its own; press once more to stop.",
+      "broadcast": "Broadcast to RDP sessions",
+      "broadcastText": "The text is typed into each selected open RDP window in turn, then focus comes back.",
+      "command": "Command mode",
+      "commandText": "Edits the selected text with a voice command, using AI.",
+      "cancel": "Cancel",
+      "cancelText": "Discards the current recording, so nothing gets inserted.",
+      "insertLast": "Paste last",
+      "insertLastText": "Insert the last transcribed text again — for example, if it went to the wrong window.",
+      "copyLast": "Copy last",
+      "copyLastText": "Put the last transcribed text on the clipboard."
+    },
+    "modesTitle": "Insert methods",
+    "modes": {
+      "auto": "Rupor recognizes RDP windows on its own and types into them; everywhere else it pastes via the clipboard.",
+      "type": "SendInput, one character at a time: any alphabet and emoji with any keyboard layout, works in RDP with the clipboard disabled.",
+      "clipboard": "The fastest option for long text. Your clipboard is restored after pasting.",
+      "broadcastTitle": "Broadcast to RDP sessions",
+      "broadcast": "Rupor activates each selected RDP window, types the text and returns focus to where you were."
+    },
+    "commandTitle": "Command mode",
+    "commandText": "Select text in any window, hold the shortcut and say what to do with it. Rupor replaces the selection with the result. Requires AI cleanup to be on.",
+    "commandHold": "hold and say the command",
+    "quoted": "“{text}”",
+    "commandExamples": {
+      "e1": "make it more polite",
+      "e2": "translate to German",
+      "e3": "cut it in half",
+      "e4": "fix the typos",
+      "e5": "turn it into a list"
+    },
+    "faqTitle": "Troubleshooting",
+    "faq": {
+      "adminQ": "Text isn't inserted into a window running as administrator",
+      "adminA": "Windows doesn't let regular programs type into elevated windows (like Registry Editor or Task Manager). Rupor shows a warning with a “Restart as administrator” button — after the restart, inserting works.",
+      "rdpQ": "The shortcut doesn't work in full-screen RDP",
+      "rdpA": "Rupor uses a low-level keyboard hook and sees keys even in a full-screen session. If it still doesn't fire, make sure mstsc's “Local Resources → Keyboard” isn't set to “On the remote computer” for Windows key combinations — or pick another key (like F13 or Pause).",
+      "cudaQ": "Recognition is slow, or there's a CUDA error",
+      "cudaA": "Make sure you have an NVIDIA driver with CUDA 12 support (528 or newer; the latest is best) and that the CUDA libraries are downloaded (Settings → About → Setup wizard). On a CUDA error Rupor switches to the CPU (int8) automatically and tells you — it's slower, but it works.",
+      "micQ": "Rupor can't hear the microphone",
+      "micA": "Open Settings → Dictation and pick a microphone — the level meter should move when you speak. Make sure microphone access is allowed in Windows Settings → Privacy & security → Microphone.",
+      "aiQ": "AI doesn't respond or takes too long",
+      "aiA": "Click “Check” in the AI settings — Rupor shows your balance, or the error if the key doesn't work. Try Amazon Bedrock as the preferred OpenRouter provider. If AI doesn't reply within the timeout, the raw text is inserted — nothing is lost.",
+      "ctrlQ": "My Ctrl+Win shortcuts (like Ctrl+Win+D) stopped working",
+      "ctrlA": "Rupor doesn't block them: if you press another key while holding Ctrl+Win, recording is quietly canceled and the shortcut works as usual. Presses shorter than 0.25 s don't start dictation.",
+      "rdpTargetsQ": "A broadcast didn't reach an RDP session",
+      "rdpTargetsA": "Text is broadcast only to open, selected sessions: Settings → Insertion → Broadcast sessions, or “Broadcast to RDP” in the tray menu. A session is remembered by the server name in the window title. If none is selected, nothing is broadcast — you can still insert the text with “Paste last”.",
+      "learnQ": "The dictionary added a word by itself",
+      "learnA": "That was your correction: after the text was inserted you fixed a word, and Rupor remembered it to get it right next time. If that was a mistake, click Undo in the indicator or delete the term on the Dictionary page. You can also switch to “Ask first” or turn learning off there.",
+      "duckQ": "Music gets quieter when I dictate",
+      "duckA": "That's by design: while recording, Rupor lowers other apps' audio — music, videos, calls — and restores the previous volume when recording ends. Choose how much to lower it, or turn it off, in Settings → Dictation → Computer audio while recording. If Rupor closes mid-recording, the volume is restored the next time it starts."
+    }
+  },
+  "aiUsage": {
+    "title": "Spending",
+    "hint": "Every AI request is logged on this computer: tokens and price as reported by the provider. Failed requests too, at $0.",
+    "refresh": "Refresh balance",
+    "periods": {
+      "today": "Today",
+      "week": "This week",
+      "month": "This month",
+      "total": "All time"
+    },
+    "tokens": "↑ {in} · ↓ {out}",
+    "tokensTitle": "Tokens: ↑ sent to AI, ↓ received from AI",
+    "chart": {
+      "title": "Daily spending",
+      "summary": "{total} over 30 days · {calls}"
+    },
+    "dayTip": "{calls} · {tokens} tokens",
+    "dayTipEmpty": "No AI requests",
+    "avgCleanup": "Avg. cleanup cost",
+    "avgCall": "Avg. request cost",
+    "avgHint": "Successful AI requests only: timeouts and errors cost $0 and don't count toward the average",
+    "byKind": "By request type",
+    "byModel": "By model",
+    "allTime": "all time",
+    "kinds": {
+      "cleanup": "Text cleanup",
+      "command": "Command mode",
+      "test": "Tests in settings"
+    },
+    "unknownModel": "Model not specified",
+    "empty": {
+      "title": "No spending yet",
+      "text": "Stats show up here after your first AI requests."
+    },
+    "balance": {
+      "title": "OpenRouter balance",
+      "checked": "Checked {ago}",
+      "notChecked": "Not checked yet",
+      "usage": "{v} spent on this key",
+      "limit": "key limit {v}",
+      "noLimit": "no limit"
+    },
+    "home": {
+      "title": "AI cleanup",
+      "details": "Spending & settings",
+      "balance": "Balance",
+      "chart": "Spending over 30 days",
+      "offTitle": "AI cleanup is off",
+      "offText": "Strips “um” and “like”, fixes punctuation and formats text to suit each app. Usually a fraction of a cent per phrase.",
+      "enable": "Turn on",
+      "configure": "Set up",
+      "enabled": "AI cleanup is on",
+      "needKey": "Add an AI provider key, then turn on cleanup with the switch at the top"
+    }
+  },
+  "titleRules": {
+    "title": "Window title rules",
+    "hint": "For windows whose title contains certain words: an RDP server, a specific chat, a browser tab. They take priority over app rules.",
+    "add": "Add rule",
+    "anyApp": "Any app",
+    "otherApp": "Other app…",
+    "inherit": "Don't change",
+    "cols": {
+      "app": "App",
+      "title": "Title contains"
+    },
+    "added": "Rule “{title}” added",
+    "deleted": "Rule “{title}” deleted",
+    "empty": {
+      "title": "No window title rules yet",
+      "text": "For example: keystrokes and no AI formatting for the “srv-etl-01” window, or business style for a “Jira” tab."
+    },
+    "dialog": {
+      "title": "Window title rule",
+      "titlePlaceholder": "srv-analytics, Jira, On-call…",
+      "browserHint": "Works for browser tabs too: a Chrome or Edge window title is the name of the open tab. Case doesn't matter; if several rules match, the longest match wins.",
+      "pick": "Pick from open and recent windows",
+      "rdp": "Open RDP sessions",
+      "noWindows": "Rupor hasn't seen a matching window yet. Switch to the window you need and refresh the list — or type the title yourself.",
+      "save": "Add rule"
+    },
+    "errors": {
+      "process": "Choose an app or enter a process name",
+      "short": "The window title must be at least {n} characters",
+      "dup": "This rule already exists",
+      "nothing": "Choose an insert method or a style — otherwise the rule changes nothing"
+    }
+  },
+  "vocab": {
+    "subtitle": "Rupor primes speech recognition with the words you say often — names and terms come out right without a hand-made dictionary.",
+    "hintsTitle": "Recognition hints",
+    "hintsText": "Before each dictation, Whisper gets a short hint: dictionary terms, your frequent words and the text you're continuing. The hint never ends up in your text — it only helps pick the right spelling.",
+    "useVocab": "Use my frequent words",
+    "useVocabHint": "From your dictations: names, product names and rare terms — overall and for the current app. Everyday words like “today” are skipped.",
+    "useContext": "Use text in the window",
+    "useContextHint": "1–2 sentences before the cursor in the field you're dictating into (up to 300 characters). Read the moment you press the key and never stored. Not read in RDP windows or password fields.",
+    "privacy": "Word frequencies are counted and stored only on this computer. If AI cleanup is on, the most frequent terms are sent along with the text — just like the dictionary.",
+    "listTitle": "Your frequent words",
+    "listHint": "Picked from the final texts in your history. Turn a switch off and that word is no longer hinted.",
+    "allApps": "All apps",
+    "counter": "{used} of {total} in the hint",
+    "times": {
+      "one": "{n} time",
+      "other": "{n} times"
+    },
+    "exclude": "Stop hinting “{word}”",
+    "include": "Hint “{word}” again",
+    "more": "Show more",
+    "offNote": "Frequent words aren't being passed to recognition right now.",
+    "turnOn": "Turn on",
+    "empty": {
+      "title": "No frequent words yet",
+      "text": "They'll appear after a few dictations: Rupor picks out terms, names and rare words from your final texts."
+    },
+    "emptyApp": {
+      "title": "No words for this app",
+      "text": "Dictations in “{app}” don't have any distinctive words yet."
+    }
+  },
+  "wizard": {
+    "skip": "Skip setup",
+    "skipStep": "Skip",
+    "stepOf": "Step {n} of {total}",
+    "back": "Back",
+    "next": "Next",
+    "language": {
+      "title": "Choose your language",
+      "text": "Rupor's interface and messages will be in this language. You can change it anytime in Settings.",
+      "windows": "Windows language",
+      "sample": "Interface in English",
+      "continue": "Continue",
+      "dictationHint": "In Auto mode, recognition favors the interface language ({lang}). If you'll mostly dictate in another language, choose it here."
+    },
+    "welcome": {
+      "title": "Welcome to Rupor",
+      "text": "Dictate text into any Windows app — faster than typing. Setup takes a couple of minutes.",
+      "f1": "Dictation into any window",
+      "f1Text": "Messengers, email, IDEs — text appears wherever your cursor is.",
+      "f2": "Works in RDP without a clipboard",
+      "f2Text": "Keystroke typing and broadcasting to the remote sessions you choose.",
+      "f3": "Recognition on your computer",
+      "f3Text": "A Whisper model on your GPU — no cloud, no telemetry.",
+      "start": "Start setup"
+    },
+    "mic": {
+      "title": "Choose a microphone",
+      "text": "Say something — the waveform and meter should come alive.",
+      "hint": "Keep the microphone at your usual distance; the green zone is ideal."
+    },
+    "model": {
+      "title": "GPU and model",
+      "text": "Rupor recognizes speech locally. Let's check CUDA and download the model if you don't have it yet.",
+      "checking": "Checking your graphics card…",
+      "checkingText": "Looking for NVIDIA CUDA",
+      "gpuText": "CUDA works, {vram} GB of video memory — recognition will be fast.",
+      "cpuOnly": "Rupor will use the CPU",
+      "cpuText": "No NVIDIA graphics card found — recognition will be slower.",
+      "cudaLibs": "CUDA libraries",
+      "cudaLibsText": "cuBLAS, about 0.55 GB",
+      "cudaLibsNoGpu": "Only needed for an NVIDIA graphics card — no use without one",
+      "notNeeded": "Not needed",
+      "recheck": "Check the graphics card again",
+      "checkFailed": "Couldn't check the graphics card: {error}",
+      "statusFailed": "Couldn't tell what's already downloaded: {error}",
+      "model": "large-v3-turbo model",
+      "modelText": "About 1.6 GB, downloaded once",
+      "download": "Download",
+      "ready": "Ready",
+      "starting": "Starting the download…",
+      "downloadError": "Couldn't start the download",
+      "needModel": "Recognition won't work without the model — download it to continue."
+    },
+    "test": {
+      "title": "Let's test recognition",
+      "text": "Click the button, say a phrase and click again. The text won't be inserted anywhere.",
+      "start": "Click and speak",
+      "stop": "Recording — click to finish",
+      "startLabel": "Start test recording",
+      "stopLabel": "Finish test recording",
+      "recognizing": "Transcribing…",
+      "waitModel": "The model is still loading…",
+      "phrase": "For example: “Tomorrow we'll update the Metabase dashboard and the ClickHouse table”",
+      "recognized": "Recognized",
+      "empty": "No speech detected — try speaking louder",
+      "audio": "Audio {v}",
+      "asr": "Recognition {v}",
+      "error": "Couldn't test recognition"
+    },
+    "hotkeys": {
+      "title": "Shortcuts",
+      "text": "The default is Ctrl+Win: hold, speak, release (just like Wispr Flow). You can pick another combination or a single key.",
+      "ptt": "The main dictation key.",
+      "broadcast": "Hold with the main key to send the text to selected RDP sessions.",
+      "command": "Hold with the main key to give a command for the selected text.",
+      "cancel": "Press while recording to cancel.",
+      "handsFree": "Double-press for hands-free mode:"
+    },
+    "ai": {
+      "title": "AI text cleanup",
+      "text": "Optional. AI strips “um” and “like”, fixes punctuation and formats the text. You'll need an OpenRouter key — you can import it from a .env file.",
+      "enable": "Turn on auto cleanup",
+      "enableHint": "You can turn it on later in Settings. Without AI everything works offline."
+    },
+    "autostart": {
+      "title": "Start with Windows",
+      "text": "So dictation is at hand right after you sign in.",
+      "switch": "Start Rupor with Windows",
+      "hint": "Rupor starts quietly in the tray."
+    },
+    "done": {
+      "title": "You're all set!",
+      "text": "Put the cursor in any field and give it a try. Settings, history and the dictionary live in the main window — open it from the tray.",
+      "hold": "Hold and speak",
+      "pill": "Changed your mind mid-recording?",
+      "cancel": "{key} to cancel",
+      "open": "Open Rupor",
+      "aiOff": "AI cleanup is off — you can turn it on in Settings."
+    }
+  },
+  "pill": {
+    "windowTitle": "Rupor — indicator",
+    "hint": "Click or hold {key} to dictate",
+    "offline": "Engine offline",
+    "paused": "Paused",
+    "pausedHint": "Rupor is paused",
+    "loading": "Loading model",
+    "error": "Engine error",
+    "errorHint": "Model failed to load — details",
+    "noModel": "Model not downloaded",
+    "noModelHint": "Click to set up",
+    "processing": "Transcribing",
+    "ai": "AI cleanup",
+    "done": "Inserted",
+    "handsFree": "hands-free",
+    "broadcast": "broadcast",
+    "noTargets": "no broadcast sessions selected",
+    "targetsMore": "and {n} more",
+    "chooseSessions": "Choose sessions",
+    "command": "command",
+    "relaunchAdmin": "Restart as administrator",
+    "openSettings": "AI settings"
+  }
+}

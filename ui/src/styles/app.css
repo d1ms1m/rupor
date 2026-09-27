@@ -1,0 +1,255 @@
+@import "tailwindcss";
+
+/* Тёмная тема — по классу на <html> (system/dark/light решает theme.ts) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Токены дизайна: цвета берутся из CSS-переменных, чтобы тема и акцент менялись на лету */
+@theme inline {
+  --font-sans: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  --color-bg: var(--c-bg);
+  --color-layer: var(--c-layer);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-surface-3: var(--c-surface-3);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-fg: var(--c-fg);
+  --color-muted: var(--c-muted);
+  --color-subtle: var(--c-subtle);
+  --color-accent: var(--c-accent);
+  --color-accent-fg: var(--c-accent-fg);
+  --color-accent-text: var(--c-accent-text);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-danger: var(--c-danger);
+  --color-warn: var(--c-warn);
+  --color-success: var(--c-success);
+  --color-info: var(--c-info);
+
+  --shadow-card: var(--sh-card);
+  --shadow-pop: var(--sh-pop);
+  --shadow-glow: 0 0 0 4px var(--c-accent-ring);
+
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 24px;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  --c-accent: #7c5cff;
+  --c-accent-fg: #ffffff;
+
+  --c-bg: #f3f3f6;
+  --c-layer: #fafafb;
+  --c-surface: #ffffff;
+  --c-surface-2: #f4f4f7;
+  --c-surface-3: #eaeaef;
+  --c-line: rgb(18 18 28 / 0.07);
+  --c-line-strong: rgb(18 18 28 / 0.13);
+  --c-fg: #14141b;
+  --c-muted: #5d5d6c;
+  --c-subtle: #9797a6;
+  --c-danger: #e5484d;
+  --c-warn: #e8930c;
+  --c-success: #2f9e68;
+  --c-info: #3e7bfa;
+
+  --c-accent-text: color-mix(in oklab, var(--c-accent) 82%, black);
+  --c-accent-soft: color-mix(in oklab, var(--c-accent) 11%, transparent);
+  --c-accent-ring: color-mix(in oklab, var(--c-accent) 22%, transparent);
+
+  --sh-card: 0 1px 2px rgb(16 16 32 / 0.04), 0 2px 8px -2px rgb(16 16 32 / 0.05);
+  --sh-pop: 0 12px 32px -8px rgb(16 16 32 / 0.18), 0 2px 6px rgb(16 16 32 / 0.06);
+
+  color-scheme: light;
+}
+
+.dark {
+  --c-bg: #0b0b0e;
+  --c-layer: #111115;
+  --c-surface: #17171c;
+  --c-surface-2: #1d1d23;
+  --c-surface-3: #26262e;
+  --c-line: rgb(255 255 255 / 0.065);
+  --c-line-strong: rgb(255 255 255 / 0.11);
+  --c-fg: #ededf2;
+  --c-muted: #a0a0ad;
+  --c-subtle: #6b6b78;
+  --c-danger: #f2555a;
+  --c-warn: #f5a524;
+  --c-success: #3dbb7d;
+  --c-info: #5b8dff;
+
+  --c-accent-text: color-mix(in oklab, var(--c-accent) 72%, white);
+  --c-accent-soft: color-mix(in oklab, var(--c-accent) 16%, transparent);
+  --c-accent-ring: color-mix(in oklab, var(--c-accent) 30%, transparent);
+
+  --sh-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 2px 10px -2px rgb(0 0 0 / 0.4);
+  --sh-pop: 0 18px 40px -10px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
+
+  color-scheme: dark;
+}
+
+/* Mica в Tauri на Windows 11: фон окна прозрачный, слои полупрозрачные */
+.mica {
+  --c-bg: transparent;
+  --c-layer: rgb(250 250 251 / 0.78);
+  --c-surface: rgb(255 255 255 / 0.86);
+}
+.mica.dark {
+  --c-layer: rgb(20 20 25 / 0.72);
+  --c-surface: rgb(30 30 36 / 0.72);
+  --c-surface-2: rgb(38 38 45 / 0.72);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "calt";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: var(--c-bg);
+  color: var(--c-fg);
+}
+
+body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--c-bg);
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.selectable {
+  user-select: text;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--c-accent) 30%, transparent);
+}
+
+/* Тонкие скроллбары */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--c-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* У полей ввода своя подсветка фокуса (рамка + свечение) */
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+button {
+  cursor: default;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Скелетон: мягкий бегущий блик */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--c-surface-2);
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--c-fg) 6%, transparent),
+    transparent
+  );
+  animation: shimmer 1.4s var(--ease-out-soft) infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Ползунок */
+input[type="range"].range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  width: 100%;
+}
+input[type="range"].range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--c-accent) 0%,
+    var(--c-accent) var(--fill, 50%),
+    var(--c-surface-3) var(--fill, 50%),
+    var(--c-surface-3) 100%
+  );
+}
+input[type="range"].range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.2);
+  transition: transform 150ms var(--ease-out-soft);
+}
+input[type="range"].range:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+/* Цвет в палитре акцента */
+input[type="color"].swatch-input {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  cursor: default;
+}
+input[type="color"].swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"].swatch-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

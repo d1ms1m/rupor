@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+samples/
+# ключ OpenRouter для tools/ai_bench.py и любые локальные .env
+.env
+*.env
+
+# сборка (PyInstaller, Tauri)
+/build/
+/dist/
+/ui/src-tauri/resources/core/

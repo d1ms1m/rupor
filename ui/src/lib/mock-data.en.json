@@ -1,0 +1,759 @@
+{
+  "phrases": [
+    {
+      "app": "telegram.exe",
+      "title": "Telegram — Analytics team",
+      "style": "messenger",
+      "ai": true,
+      "raw": "so uh let's jump on a call tomorrow around eleven and go over the fees table",
+      "text": "let's jump on a call tomorrow around 11 and go over the fees table"
+    },
+    {
+      "app": "cursor.exe",
+      "title": "engine.py — rupor — Cursor",
+      "style": "code",
+      "ai": true,
+      "raw": "add timeout handling to the cleanup function and return the raw text if the ai didn't respond",
+      "text": "Add timeout handling to the cleanup() function and return the raw text if the AI didn't respond."
+    },
+    {
+      "app": "outlook.exe",
+      "title": "Inbox — Outlook",
+      "style": "business",
+      "ai": true,
+      "raw": "hi everyone attaching the plan versus actual report for september please take a look by friday",
+      "text": "Hi everyone,\n\nAttaching the plan vs. actual report for September. Please take a look by Friday."
+    },
+    {
+      "app": "mstsc.exe",
+      "title": "srv-analytics-02 - Remote Desktop Connection",
+      "style": "normal",
+      "ai": false,
+      "target": "rdp_all",
+      "raw": "restart the metabase service after the click house upgrade",
+      "text": "Restart the Metabase service after the ClickHouse upgrade."
+    },
+    {
+      "app": "chrome.exe",
+      "title": "ANL-482 — Jira — Google Chrome",
+      "style": "normal",
+      "ai": true,
+      "raw": "um check why the metabase dashboard shows empty values over the weekend",
+      "text": "Check why the Metabase dashboard shows empty values over the weekend."
+    },
+    {
+      "app": "telegram.exe",
+      "title": "Telegram — Emma Clarke",
+      "style": "messenger",
+      "ai": true,
+      "raw": "hey yeah i looked it over basically everything matches except two merchants i'll send the list after lunch",
+      "text": "hey! yeah, looked it over — everything matches except two merchants. will send the list after lunch"
+    },
+    {
+      "app": "code.exe",
+      "title": "queries.sql — dwh — Visual Studio Code",
+      "style": "code",
+      "ai": false,
+      "raw": "Move the fee calculation into a separate CTE and add an index on merchant_id.",
+      "text": "Move the fee calculation into a separate CTE and add an index on merchant_id."
+    },
+    {
+      "app": "obsidian.exe",
+      "title": "Ideas — Obsidian",
+      "style": "normal",
+      "ai": true,
+      "raw": "idea set up a grafana alert if the click house load delay is over fifteen minutes",
+      "text": "Idea: set up a Grafana alert if the ClickHouse load delay is over 15 minutes."
+    },
+    {
+      "app": "mstsc.exe",
+      "title": "srv-etl-01 - Remote Desktop Connection",
+      "style": "as_is",
+      "ai": false,
+      "raw": "Check free space on drive D and the overnight scheduler logs.",
+      "text": "Check free space on drive D and the overnight scheduler logs."
+    },
+    {
+      "app": "outlook.exe",
+      "title": "New message — Outlook",
+      "style": "business",
+      "ai": true,
+      "raw": "hello paul first i'm confirming thursday's meeting second i'll send the slides in advance",
+      "text": "Hello Paul,\n\n1. I'm confirming Thursday's meeting.\n2. I'll send the slides in advance."
+    },
+    {
+      "app": "chrome.exe",
+      "title": "ChatGPT — Google Chrome",
+      "style": "code",
+      "ai": false,
+      "raw": "Write a Python script that exports ClickHouse data to Parquet by day.",
+      "text": "Write a Python script that exports ClickHouse data to Parquet by day."
+    },
+    {
+      "app": "telegram.exe",
+      "title": "Telegram — On-call",
+      "style": "messenger",
+      "ai": false,
+      "target": "window",
+      "raw": "Shipped the fix, rebuilding the table will take about twenty minutes.",
+      "text": "Shipped the fix, rebuilding the table will take about twenty minutes."
+    },
+    {
+      "app": "cursor.exe",
+      "title": "api.py — rupor — Cursor",
+      "style": "code",
+      "ai": true,
+      "target": "command",
+      "raw": "make it shorter",
+      "text": "Returns recent dictations with pagination."
+    },
+    {
+      "app": "winword.exe",
+      "title": "Export schedule.docx — Word",
+      "style": "business",
+      "ai": true,
+      "raw": "the data export runs daily at six am eastern time the owner is the on call analyst",
+      "text": "The data export runs daily at 6:00 AM Eastern Time. Owner: the on-call analyst."
+    },
+    {
+      "app": "slack.exe",
+      "title": "Slack — #dwh",
+      "style": "messenger",
+      "ai": true,
+      "raw": "folks who touched the payments_daily table there are duplicates since yesterday",
+      "text": "folks, who touched payments_daily? there are duplicates since yesterday"
+    },
+    {
+      "app": "chrome.exe",
+      "title": "Grafana — Google Chrome",
+      "style": "normal",
+      "ai": false,
+      "raw": "Add a panel with replication lag and a five second threshold.",
+      "text": "Add a panel with replication lag and a 5-second threshold."
+    }
+  ],
+  "dictionary": [
+    {
+      "term": "ClickHouse",
+      "variants": [
+        "click house",
+        "clickhouse",
+        "click houses"
+      ]
+    },
+    {
+      "term": "Metabase",
+      "variants": [
+        "meta base",
+        "meta bass",
+        "metta base"
+      ]
+    },
+    {
+      "term": "Grafana",
+      "variants": [
+        "grafanna",
+        "graph fana"
+      ]
+    },
+    {
+      "term": "PostgreSQL",
+      "variants": [
+        "postgres",
+        "post gress",
+        "postgres q l"
+      ]
+    },
+    {
+      "term": "Kubernetes",
+      "variants": [
+        "cooper netties",
+        "k eights"
+      ]
+    },
+    {
+      "term": "API",
+      "variants": [
+        "a p i",
+        "a pie"
+      ]
+    },
+    {
+      "term": "Airflow",
+      "variants": [
+        "air flow",
+        "airflo"
+      ]
+    },
+    {
+      "term": "dbt",
+      "variants": [
+        "d b t",
+        "dee bee tee"
+      ]
+    },
+    {
+      "term": "S3",
+      "variants": [
+        "s three",
+        "s 3"
+      ]
+    },
+    {
+      "term": "RDP",
+      "variants": [
+        "r d p",
+        "are dee pee"
+      ]
+    }
+  ],
+  "snippets": [
+    {
+      "trigger": "my email",
+      "text": "alex.morgan@example.com"
+    },
+    {
+      "trigger": "signature",
+      "text": "Best regards,\nAlex Morgan\nHead of Analytics"
+    },
+    {
+      "trigger": "sync",
+      "text": "Shall we sync tomorrow at 11:00 AM? I'll send a calendar link."
+    },
+    {
+      "trigger": "office address",
+      "text": "1 Example Street, Suite 101, Springfield"
+    },
+    {
+      "trigger": "thanks in advance",
+      "text": "Thanks in advance! Looking forward to your feedback by end of day."
+    }
+  ],
+  "styles": [
+    {
+      "id": "as_is",
+      "name": "As is",
+      "description": "No AI: text is inserted exactly as Whisper recognized it (the dictionary and snippets still apply)."
+    },
+    {
+      "id": "normal",
+      "name": "Standard",
+      "description": "Removes filler words and false starts, adds punctuation and spells terms correctly. Keeps your tone."
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "description": "For email and documents: polished language without slang or casual phrasing, in a polite, neutral tone."
+    },
+    {
+      "id": "messenger",
+      "name": "Chat message",
+      "description": "For Telegram and chats: a natural, conversational tone with short sentences and no corporate speak."
+    },
+    {
+      "id": "code",
+      "name": "Code / prompt",
+      "description": "For Cursor, VS Code and prompts: terms, function names, snake_case and paths stay exactly as in code."
+    }
+  ],
+  "devices": [
+    "Microphone (Razer Seiren Mini)",
+    "Headset (HyperX Cloud II Wireless)",
+    "Webcam microphone (Logitech C920)",
+    "Microphone Array (Realtek Audio)"
+  ],
+  "recentApps": [
+    {
+      "process": "telegram.exe",
+      "title": "Telegram — Analytics team",
+      "titles": [
+        "Telegram — Analytics team",
+        "Telegram — Emma Clarke",
+        "Telegram — On-call"
+      ]
+    },
+    {
+      "process": "cursor.exe",
+      "title": "engine.py — rupor — Cursor",
+      "titles": [
+        "engine.py — rupor — Cursor",
+        "api.py — rupor — Cursor"
+      ]
+    },
+    {
+      "process": "chrome.exe",
+      "title": "ANL-482 — Jira — Google Chrome",
+      "titles": [
+        "ANL-482 — Jira — Google Chrome",
+        "Fees dashboard — Metabase — Google Chrome",
+        "ChatGPT — Google Chrome",
+        "Inbox (3) — Gmail — Google Chrome"
+      ]
+    },
+    {
+      "process": "outlook.exe",
+      "title": "Inbox — Outlook",
+      "titles": [
+        "Inbox — Outlook",
+        "New message — Outlook"
+      ]
+    },
+    {
+      "process": "mstsc.exe",
+      "title": "srv-analytics-02 - Remote Desktop Connection",
+      "titles": [
+        "srv-analytics-02 - Remote Desktop Connection",
+        "srv-etl-01 - Remote Desktop Connection",
+        "db-replica-03 - Remote Desktop Connection"
+      ]
+    },
+    {
+      "process": "slack.exe",
+      "title": "Slack — #dwh",
+      "titles": [
+        "Slack — #dwh",
+        "Slack — #incidents"
+      ]
+    },
+    {
+      "process": "winword.exe",
+      "title": "Export schedule.docx — Word",
+      "titles": [
+        "Export schedule.docx — Word"
+      ]
+    },
+    {
+      "process": "obsidian.exe",
+      "title": "Ideas — Obsidian",
+      "titles": [
+        "Ideas — Obsidian"
+      ]
+    },
+    {
+      "process": "explorer.exe",
+      "title": "Downloads",
+      "titles": [
+        "Downloads"
+      ]
+    }
+  ],
+  "rdpWindows": [
+    {
+      "key": "srv-analytics-02",
+      "title": "srv-analytics-02 - Remote Desktop Connection",
+      "process": "mstsc.exe"
+    },
+    {
+      "key": "srv-etl-01",
+      "title": "srv-etl-01 - Remote Desktop Connection",
+      "process": "mstsc.exe"
+    },
+    {
+      "key": "db-replica-03",
+      "title": "db-replica-03 - Remote Desktop Connection",
+      "process": "mstsc.exe"
+    },
+    {
+      "key": "mRemoteNG - jump-host",
+      "title": "mRemoteNG - jump-host",
+      "process": "mRemoteNG.exe"
+    }
+  ],
+  "draft": "Plan for the week\n\n1. Rebuild the merchant fees table in ClickHouse.\n2. Update the Metabase dashboard and check the plan vs. actual gaps.\n3. Agree on the export schedule with Paul.\n\nNotes after the call: ",
+  "fillers": [
+    "uh",
+    "um",
+    "uhm",
+    "er",
+    "like",
+    "you know",
+    "basically",
+    "so",
+    "kind of",
+    "sort of",
+    "i mean",
+    "no wait"
+  ],
+  "cleanupSample": {
+    "raw": "um so basically tomorrow we need to uh rebuild that merchant fees table in click house you know and also update the dashboard in meta base so let's sync at ten no wait eleven and first check plan versus actual and second like see where the gaps are",
+    "text": "Tomorrow we need to rebuild that merchant fees table in ClickHouse and update the dashboard in Metabase. Let's sync at 11 and:\n\n1. Check plan vs. actual.\n2. See where the gaps are."
+  },
+  "testResult": "Recognition test: tomorrow we'll rebuild the table in ClickHouse and update the Metabase dashboard.",
+  "texts": {
+    "progressModel": "Downloaded {done} of {total} MB",
+    "progressCuda": "CUDA libraries: {done} of {total} MB",
+    "progressDone": "Done",
+    "envNotFound": "No .env file at this path",
+    "envEmpty": "No path to the .env file",
+    "noKey": "No OpenRouter key set",
+    "badKey": "The key doesn't look right",
+    "noticeAdmin": "“{name}” is running as administrator, so Windows won't let Rupor type into it. Restart Rupor as administrator.",
+    "noticeAi": "The AI didn't respond. {tail}",
+    "noticeSelect": "Select some text for command mode",
+    "noticeReinsert": "Text inserted into “{app}”",
+    "keyLabel": "Rupor — dictation",
+    "learnAdded": "Added to dictionary: “{variant}” → {term}",
+    "learnAddedTerm": "Added to dictionary: {term}",
+    "learnSuggest": "Add to dictionary: “{variant}” → {term}?",
+    "learnSuggestTerm": "Add {term} to the dictionary?",
+    "learnNotFound": "The term “{term}” is no longer in the dictionary",
+    "learnEmpty": "Empty term — nothing to add",
+    "noTargets": "No RDP sessions selected for broadcast",
+    "sentRdp": {
+      "one": "Sent to {n} RDP session",
+      "other": "Sent to {n} RDP sessions"
+    },
+    "balanceLow": "Your OpenRouter balance is below $1. Top it up, or AI cleanup will stop working (${balance} left)",
+    "titleShort": "The window title must be at least 2 characters",
+    "titleProcess": "Enter a process (.exe name) or “*”",
+    "unknownStyle": "Unknown style “{style}”",
+    "badMode": "Unknown insert method “{mode}”",
+    "ruleNotFound": "No such rule",
+    "emptyWord": "Empty word",
+    "badSetting": "Invalid value for {key}: “{value}”",
+    "aiTailInserted": "The original text was inserted instead",
+    "insertFailed": "Couldn't insert the text: {error}. It's saved: use “Paste last” to insert it",
+    "insertError": "The active window changed, so typing stopped and the rest of the text wasn't sent",
+    "adminWindow": "Administrator: Command Prompt - ssh deploy@srv-analytics-02"
+  },
+  "learnSamples": [
+    {
+      "variant": "no shun",
+      "term": "Notion"
+    },
+    {
+      "variant": "meta bays",
+      "term": "Metabase"
+    },
+    {
+      "variant": "github",
+      "term": "GitHub"
+    },
+    {
+      "variant": "pie torch",
+      "term": "PyTorch"
+    },
+    {
+      "variant": "jeera",
+      "term": "Jira"
+    },
+    {
+      "variant": "click house",
+      "term": "ClickHouse"
+    }
+  ],
+  "broadcastTargets": [
+    "srv-analytics-02",
+    "srv-etl-01",
+    "dev-box"
+  ],
+  "titleRules": [
+    {
+      "process": "mstsc.exe",
+      "title": "srv-etl",
+      "insert_mode": "type",
+      "style": "as_is"
+    },
+    {
+      "process": "chrome.exe",
+      "title": "Jira",
+      "insert_mode": null,
+      "style": "business"
+    },
+    {
+      "process": "*",
+      "title": "ChatGPT",
+      "insert_mode": null,
+      "style": "code"
+    }
+  ],
+  "aiModels": {
+    "main": "anthropic/claude-haiku-4.5",
+    "other": [
+      "google/gemini-2.5-flash",
+      "anthropic/claude-sonnet-4.5"
+    ]
+  },
+  "vocab": [
+    {
+      "word": "ClickHouse",
+      "count": 214,
+      "apps": {
+        "telegram.exe": 61,
+        "cursor.exe": 48,
+        "obsidian.exe": 37,
+        "chrome.exe": 40,
+        "mstsc.exe": 28
+      }
+    },
+    {
+      "word": "Metabase",
+      "count": 167,
+      "apps": {
+        "chrome.exe": 70,
+        "telegram.exe": 52,
+        "mstsc.exe": 45
+      }
+    },
+    {
+      "word": "merchants",
+      "count": 121,
+      "apps": {
+        "telegram.exe": 70,
+        "outlook.exe": 51
+      }
+    },
+    {
+      "word": "chargeback",
+      "count": 96,
+      "apps": {
+        "telegram.exe": 60,
+        "outlook.exe": 36
+      }
+    },
+    {
+      "word": "Grafana",
+      "count": 88,
+      "apps": {
+        "obsidian.exe": 40,
+        "slack.exe": 48
+      }
+    },
+    {
+      "word": "Paul",
+      "count": 74,
+      "apps": {
+        "outlook.exe": 60,
+        "telegram.exe": 14
+      }
+    },
+    {
+      "word": "plan-vs-actual",
+      "count": 69,
+      "apps": {
+        "outlook.exe": 44,
+        "winword.exe": 25
+      }
+    },
+    {
+      "word": "Parquet",
+      "count": 57,
+      "apps": {
+        "chrome.exe": 30,
+        "cursor.exe": 27
+      }
+    },
+    {
+      "word": "merchant_id",
+      "count": 52,
+      "apps": {
+        "code.exe": 30,
+        "cursor.exe": 22
+      }
+    },
+    {
+      "word": "Jira",
+      "count": 49,
+      "apps": {
+        "chrome.exe": 49
+      }
+    },
+    {
+      "word": "CTE",
+      "count": 44,
+      "apps": {
+        "code.exe": 30,
+        "cursor.exe": 14
+      }
+    },
+    {
+      "word": "dashboard",
+      "count": 41,
+      "apps": {
+        "chrome.exe": 21,
+        "telegram.exe": 20
+      }
+    },
+    {
+      "word": "Emma",
+      "count": 38,
+      "apps": {
+        "telegram.exe": 38
+      }
+    },
+    {
+      "word": "cleanup()",
+      "count": 35,
+      "apps": {
+        "cursor.exe": 35
+      }
+    },
+    {
+      "word": "Airflow",
+      "count": 33,
+      "apps": {
+        "slack.exe": 18,
+        "mstsc.exe": 15
+      }
+    },
+    {
+      "word": "DWH",
+      "count": 31,
+      "apps": {
+        "slack.exe": 31
+      }
+    },
+    {
+      "word": "runbook",
+      "count": 29,
+      "apps": {
+        "winword.exe": 29
+      }
+    },
+    {
+      "word": "Bedrock",
+      "count": 27,
+      "apps": {
+        "cursor.exe": 27
+      }
+    },
+    {
+      "word": "Stripe",
+      "count": 24,
+      "apps": {
+        "telegram.exe": 12,
+        "outlook.exe": 12
+      }
+    },
+    {
+      "word": "acquiring",
+      "count": 22,
+      "apps": {
+        "outlook.exe": 22
+      }
+    },
+    {
+      "word": "srv-etl-01",
+      "count": 21,
+      "apps": {
+        "mstsc.exe": 21
+      }
+    },
+    {
+      "word": "Harris",
+      "count": 19,
+      "apps": {
+        "outlook.exe": 19
+      }
+    },
+    {
+      "word": "Superset",
+      "count": 17,
+      "apps": {
+        "chrome.exe": 17
+      }
+    },
+    {
+      "word": "pandas",
+      "count": 16,
+      "apps": {
+        "cursor.exe": 16
+      }
+    },
+    {
+      "word": "reconciliation",
+      "count": 15,
+      "apps": {
+        "outlook.exe": 15
+      }
+    },
+    {
+      "word": "OpenRouter",
+      "count": 14,
+      "apps": {
+        "cursor.exe": 14
+      }
+    },
+    {
+      "word": "Slack",
+      "count": 12,
+      "apps": {
+        "telegram.exe": 12
+      }
+    },
+    {
+      "word": "fees_mart",
+      "count": 11,
+      "apps": {
+        "code.exe": 11
+      }
+    },
+    {
+      "word": "On-call",
+      "count": 10,
+      "apps": {
+        "telegram.exe": 10
+      }
+    },
+    {
+      "word": "Obsidian",
+      "count": 9,
+      "apps": {
+        "obsidian.exe": 9
+      }
+    },
+    {
+      "word": "Lakehouse",
+      "count": 8,
+      "apps": {
+        "chrome.exe": 8
+      }
+    },
+    {
+      "word": "Tableau",
+      "count": 7,
+      "apps": {
+        "chrome.exe": 7
+      }
+    },
+    {
+      "word": "dbt",
+      "count": 7,
+      "apps": {
+        "cursor.exe": 7
+      }
+    },
+    {
+      "word": "Clarke",
+      "count": 6,
+      "apps": {
+        "telegram.exe": 6
+      }
+    },
+    {
+      "word": "Kafka",
+      "count": 6,
+      "apps": {
+        "slack.exe": 6
+      }
+    },
+    {
+      "word": "uptime",
+      "count": 5,
+      "apps": {
+        "mstsc.exe": 5
+      }
+    },
+    {
+      "word": "SLA",
+      "count": 5,
+      "apps": {
+        "outlook.exe": 5
+      }
+    }
+  ],
+  "vocabExcluded": [
+    "dashboard",
+    "Slack"
+  ]
+}

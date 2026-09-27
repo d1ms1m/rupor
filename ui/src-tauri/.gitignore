@@ -1,0 +1,6 @@
+# Сборка Rust
+/target/
+# Схемы, которые генерирует tauri-build
+/gen/schemas
+# Ядро кладёт сюда build.cmd (PyInstaller); README.txt создаёт build.rs
+/resources/

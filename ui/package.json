@@ -1,0 +1,46 @@
+{
+  "name": "rupor-ui",
+  "private": true,
+  "version": "0.4.0",
+  "license": "MIT",
+  "author": "listapad2024",
+  "homepage": "https://github.com/listapad2024/rupor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/listapad2024/rupor.git",
+    "directory": "ui"
+  },
+  "bugs": {
+    "url": "https://github.com/listapad2024/rupor/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 1420 --strictPort",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "preview": "vite preview --port 1421 --strictPort",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "check:contract": "node scripts/check-contract.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-autostart": "^2.5.0",
+    "framer-motion": "^12.23.0",
+    "lucide-react": "^1.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@tauri-apps/cli": "^2.8.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.0"
+  }
+}

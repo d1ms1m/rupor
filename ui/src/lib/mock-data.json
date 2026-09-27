@@ -1,0 +1,763 @@
+{
+  "phrases": [
+    {
+      "app": "telegram.exe",
+      "title": "Telegram — Команда аналитики",
+      "style": "messenger",
+      "ai": true,
+      "raw": "ну короче давай завтра созвонимся часов в одиннадцать и обсудим витрину по комиссиям",
+      "text": "давай завтра созвонимся часов в 11 и обсудим витрину по комиссиям"
+    },
+    {
+      "app": "cursor.exe",
+      "title": "engine.py — rupor — Cursor",
+      "style": "code",
+      "ai": true,
+      "raw": "добавь обработку таймаута в функцию cleanup и верни сырой текст если ии не ответил",
+      "text": "Добавь обработку таймаута в функцию cleanup() и верни сырой текст, если ИИ не ответил."
+    },
+    {
+      "app": "outlook.exe",
+      "title": "Входящие — Outlook",
+      "style": "business",
+      "ai": true,
+      "raw": "добрый день коллеги высылаю отчёт по сверке план факт за сентябрь прошу посмотреть до пятницы",
+      "text": "Добрый день, коллеги! Высылаю отчёт по сверке план-факт за сентябрь. Прошу посмотреть до пятницы."
+    },
+    {
+      "app": "mstsc.exe",
+      "title": "srv-analytics-02 — Подключение к удалённому рабочему столу",
+      "style": "normal",
+      "ai": false,
+      "target": "rdp_all",
+      "raw": "перезапустить сервис метабейс после обновления клик хауса",
+      "text": "Перезапустить сервис Metabase после обновления ClickHouse."
+    },
+    {
+      "app": "chrome.exe",
+      "title": "Задача ANL-482 — Jira — Google Chrome",
+      "style": "normal",
+      "ai": true,
+      "raw": "эээ проверить почему дашборд в метабейсе показывает пустые значения за выходные",
+      "text": "Проверить, почему дашборд в Metabase показывает пустые значения за выходные."
+    },
+    {
+      "app": "telegram.exe",
+      "title": "Telegram — Анна Смирнова",
+      "style": "messenger",
+      "ai": true,
+      "raw": "привет да я посмотрел в общем всё сходится кроме двух мерчантов скину список после обеда",
+      "text": "привет! да, посмотрел — всё сходится, кроме двух мерчантов. скину список после обеда"
+    },
+    {
+      "app": "code.exe",
+      "title": "queries.sql — dwh — Visual Studio Code",
+      "style": "code",
+      "ai": false,
+      "raw": "Вынести расчёт комиссии в отдельный CTE и добавить индекс по merchant_id.",
+      "text": "Вынести расчёт комиссии в отдельный CTE и добавить индекс по merchant_id."
+    },
+    {
+      "app": "obsidian.exe",
+      "title": "Идеи — Obsidian",
+      "style": "normal",
+      "ai": true,
+      "raw": "идея сделать алерт в графане если задержка загрузки в клик хаус больше пятнадцати минут",
+      "text": "Идея: сделать алерт в Grafana, если задержка загрузки в ClickHouse больше 15 минут."
+    },
+    {
+      "app": "mstsc.exe",
+      "title": "srv-etl-01 — Подключение к удалённому рабочему столу",
+      "style": "as_is",
+      "ai": false,
+      "raw": "Проверить свободное место на диске D и логи планировщика за ночь.",
+      "text": "Проверить свободное место на диске D и логи планировщика за ночь."
+    },
+    {
+      "app": "outlook.exe",
+      "title": "Новое сообщение — Outlook",
+      "style": "business",
+      "ai": true,
+      "raw": "здравствуйте павел во первых подтверждаю встречу в четверг во вторых пришлю презентацию заранее",
+      "text": "Здравствуйте, Павел!\n\n1. Подтверждаю встречу в четверг.\n2. Пришлю презентацию заранее."
+    },
+    {
+      "app": "chrome.exe",
+      "title": "ChatGPT — Google Chrome",
+      "style": "code",
+      "ai": false,
+      "raw": "Напиши запрос на Python, который выгружает данные из ClickHouse в Parquet по дням.",
+      "text": "Напиши запрос на Python, который выгружает данные из ClickHouse в Parquet по дням."
+    },
+    {
+      "app": "telegram.exe",
+      "title": "Telegram — Дежурные",
+      "style": "messenger",
+      "ai": false,
+      "target": "window",
+      "raw": "Выкатил фикс, пересборка витрины займёт минут двадцать.",
+      "text": "Выкатил фикс, пересборка витрины займёт минут двадцать."
+    },
+    {
+      "app": "cursor.exe",
+      "title": "api.py — rupor — Cursor",
+      "style": "code",
+      "ai": true,
+      "target": "command",
+      "raw": "переведи на английский",
+      "text": "Returns the list of recent dictations with pagination."
+    },
+    {
+      "app": "winword.exe",
+      "title": "Регламент выгрузок.docx — Word",
+      "style": "business",
+      "ai": true,
+      "raw": "выгрузка данных выполняется ежедневно в шесть утра по московскому времени ответственный дежурный аналитик",
+      "text": "Выгрузка данных выполняется ежедневно в 6:00 по московскому времени. Ответственный — дежурный аналитик."
+    },
+    {
+      "app": "slack.exe",
+      "title": "Slack — #dwh",
+      "style": "messenger",
+      "ai": true,
+      "raw": "ребята кто трогал таблицу payments_daily там дубли появились со вчерашнего дня",
+      "text": "ребята, кто трогал таблицу payments_daily? там дубли со вчерашнего дня"
+    },
+    {
+      "app": "chrome.exe",
+      "title": "Grafana — Google Chrome",
+      "style": "normal",
+      "ai": false,
+      "raw": "Добавить панель с задержкой репликации и порогом в пять секунд.",
+      "text": "Добавить панель с задержкой репликации и порогом в 5 секунд."
+    }
+  ],
+  "dictionary": [
+    {
+      "term": "ClickHouse",
+      "variants": [
+        "клик хаус",
+        "кликхаус",
+        "клик хаусе",
+        "клик хауса"
+      ]
+    },
+    {
+      "term": "Metabase",
+      "variants": [
+        "метабейс",
+        "мета бейс",
+        "метабейсе"
+      ]
+    },
+    {
+      "term": "Grafana",
+      "variants": [
+        "графана",
+        "графане",
+        "графану"
+      ]
+    },
+    {
+      "term": "PostgreSQL",
+      "variants": [
+        "постгрес",
+        "постгре",
+        "постгрескуэль"
+      ]
+    },
+    {
+      "term": "Kubernetes",
+      "variants": [
+        "кубернетес",
+        "кубер"
+      ]
+    },
+    {
+      "term": "API",
+      "variants": [
+        "апи",
+        "эй пи ай"
+      ]
+    },
+    {
+      "term": "Airflow",
+      "variants": [
+        "эйрфлоу",
+        "эир флоу"
+      ]
+    },
+    {
+      "term": "dbt",
+      "variants": [
+        "дбт",
+        "ди би ти"
+      ]
+    },
+    {
+      "term": "S3",
+      "variants": [
+        "эс три",
+        "с три"
+      ]
+    },
+    {
+      "term": "RDP",
+      "variants": [
+        "эр ди пи",
+        "рдп"
+      ]
+    }
+  ],
+  "snippets": [
+    {
+      "trigger": "мой имейл",
+      "text": "ivan.petrov@example.com"
+    },
+    {
+      "trigger": "подпись",
+      "text": "С уважением,\nИван Петров\nруководитель группы аналитики"
+    },
+    {
+      "trigger": "созвон",
+      "text": "Давайте созвонимся завтра в 11:00 по Москве? Ссылку пришлю в календаре."
+    },
+    {
+      "trigger": "адрес офиса",
+      "text": "Москва, ул. Примерная, д. 1, офис 101"
+    },
+    {
+      "trigger": "спасибо жду",
+      "text": "Спасибо! Жду обратную связь до конца дня."
+    }
+  ],
+  "styles": [
+    {
+      "id": "as_is",
+      "name": "Как есть",
+      "description": "Без ИИ: текст вставляется так, как его распознал Whisper (словарь и сниппеты всё равно применяются)."
+    },
+    {
+      "id": "normal",
+      "name": "Обычный",
+      "description": "Убирает паразиты и оговорки, расставляет пунктуацию, термины пишет правильно. Стиль речи не меняет."
+    },
+    {
+      "id": "business",
+      "name": "Деловой",
+      "description": "Для почты и документов: литературный язык, без разговорных оборотов и жаргона, вежливый нейтральный тон."
+    },
+    {
+      "id": "messenger",
+      "name": "Сообщение в мессенджер",
+      "description": "Для Telegram и чатов: живой разговорный тон, короткие фразы, без канцелярита."
+    },
+    {
+      "id": "code",
+      "name": "Для кода/промпта",
+      "description": "Для Cursor, VS Code и промптов: термины, имена функций, snake_case и пути сохраняются как в коде."
+    }
+  ],
+  "devices": [
+    "Микрофон (Razer Seiren Mini)",
+    "Гарнитура (HyperX Cloud II Wireless)",
+    "Микрофон веб-камеры (Logitech C920)",
+    "Микрофонный массив (Realtek Audio)"
+  ],
+  "recentApps": [
+    {
+      "process": "telegram.exe",
+      "title": "Telegram — Команда аналитики",
+      "titles": [
+        "Telegram — Команда аналитики",
+        "Telegram — Анна Смирнова",
+        "Telegram — Дежурные"
+      ]
+    },
+    {
+      "process": "cursor.exe",
+      "title": "engine.py — rupor — Cursor",
+      "titles": [
+        "engine.py — rupor — Cursor",
+        "api.py — rupor — Cursor"
+      ]
+    },
+    {
+      "process": "chrome.exe",
+      "title": "Задача ANL-482 — Jira — Google Chrome",
+      "titles": [
+        "Задача ANL-482 — Jira — Google Chrome",
+        "Дашборд комиссий — Metabase — Google Chrome",
+        "ChatGPT — Google Chrome",
+        "Входящие (3) — Gmail — Google Chrome"
+      ]
+    },
+    {
+      "process": "outlook.exe",
+      "title": "Входящие — Outlook",
+      "titles": [
+        "Входящие — Outlook",
+        "Новое сообщение — Outlook"
+      ]
+    },
+    {
+      "process": "mstsc.exe",
+      "title": "srv-analytics-02 - Подключение к удалённому рабочему столу",
+      "titles": [
+        "srv-analytics-02 - Подключение к удалённому рабочему столу",
+        "srv-etl-01 - Подключение к удалённому рабочему столу",
+        "db-replica-03 - Remote Desktop Connection"
+      ]
+    },
+    {
+      "process": "slack.exe",
+      "title": "Slack — #dwh",
+      "titles": [
+        "Slack — #dwh",
+        "Slack — #incidents"
+      ]
+    },
+    {
+      "process": "winword.exe",
+      "title": "Регламент выгрузок.docx — Word",
+      "titles": [
+        "Регламент выгрузок.docx — Word"
+      ]
+    },
+    {
+      "process": "obsidian.exe",
+      "title": "Идеи — Obsidian",
+      "titles": [
+        "Идеи — Obsidian"
+      ]
+    },
+    {
+      "process": "explorer.exe",
+      "title": "Загрузки",
+      "titles": [
+        "Загрузки"
+      ]
+    }
+  ],
+  "rdpWindows": [
+    {
+      "key": "srv-analytics-02",
+      "title": "srv-analytics-02 - Подключение к удалённому рабочему столу",
+      "process": "mstsc.exe"
+    },
+    {
+      "key": "srv-etl-01",
+      "title": "srv-etl-01 - Подключение к удалённому рабочему столу",
+      "process": "mstsc.exe"
+    },
+    {
+      "key": "db-replica-03",
+      "title": "db-replica-03 - Remote Desktop Connection",
+      "process": "mstsc.exe"
+    },
+    {
+      "key": "mRemoteNG - jump-host",
+      "title": "mRemoteNG - jump-host",
+      "process": "mRemoteNG.exe"
+    }
+  ],
+  "draft": "План на неделю\n\n1. Пересобрать витрину по комиссиям мерчантов в ClickHouse.\n2. Обновить дашборд в Metabase и проверить расхождения план-факт.\n3. Договориться с Павлом о регламенте выгрузок.\n\nЗаметки после созвона: ",
+  "fillers": [
+    "эээ",
+    "ээ",
+    "ммм",
+    "ну",
+    "вот",
+    "короче",
+    "как бы",
+    "типа",
+    "в общем",
+    "это самое",
+    "значит",
+    "слушай"
+  ],
+  "cleanupSample": {
+    "raw": "ээ короче слушай ну надо значит завтра в клик хаусе ну пересобрать ту витрину по комиссиям мерчантов вот и это самое в метабейс дашборд обновить в общем часов в десять нет то есть в одиннадцать созвонимся и во первых проверим план факт во вторых ну типа посмотрим где расхождения",
+    "text": "Надо завтра в ClickHouse пересобрать ту витрину по комиссиям мерчантов и в Metabase дашборд обновить. В 11 созвонимся и:\n\n1. Проверим план-факт.\n2. Посмотрим, где расхождения."
+  },
+  "testResult": "Проверка распознавания: завтра в ClickHouse пересоберём витрину и обновим дашборд в Metabase.",
+  "texts": {
+    "progressModel": "Загружено {done} из {total} МБ",
+    "progressCuda": "Библиотеки CUDA: {done} из {total} МБ",
+    "progressDone": "Готово",
+    "envNotFound": "Файл .env не найден по этому пути",
+    "envEmpty": "Не задан путь к файлу .env",
+    "noKey": "Ключ OpenRouter не задан",
+    "badKey": "Ключ выглядит некорректно",
+    "noticeAdmin": "Окно «{name}» запущено от имени администратора — Windows не даёт в него печатать. Перезапустите Рупор от администратора.",
+    "noticeAi": "ИИ не ответил — {tail}",
+    "noticeSelect": "Выделите текст для командного режима",
+    "noticeReinsert": "Текст вставлен в «{app}»",
+    "keyLabel": "Рупор — диктовка",
+    "learnAdded": "В словарь добавлено: «{variant}» → {term}",
+    "learnAddedTerm": "В словарь добавлено: {term}",
+    "learnSuggest": "Добавить в словарь: «{variant}» → {term}?",
+    "learnSuggestTerm": "Добавить в словарь: {term}?",
+    "learnNotFound": "Термина «{term}» уже нет в словаре",
+    "learnEmpty": "Пустой термин — добавлять нечего",
+    "noTargets": "Не выбраны RDP-сессии для рассылки",
+    "sentRdp": {
+      "few": "Отправлено в {n} RDP-сессии",
+      "many": "Отправлено в {n} RDP-сессий",
+      "one": "Отправлено в {n} RDP-сессию",
+      "other": "Отправлено в {n} RDP-сессии"
+    },
+    "balanceLow": "На балансе OpenRouter меньше $1 — пополните его, иначе ИИ-очистка перестанет работать (осталось ${balance})",
+    "titleShort": "Название окна — не короче 2 символов",
+    "titleProcess": "Укажите процесс (имя .exe) или «*»",
+    "unknownStyle": "Неизвестный стиль «{style}»",
+    "badMode": "Неизвестный способ вставки «{mode}»",
+    "ruleNotFound": "Такого правила нет",
+    "emptyWord": "Пустое слово",
+    "badSetting": "Недопустимое значение {key}: «{value}»",
+    "aiTailInserted": "вставлен текст без обработки",
+    "insertFailed": "Не удалось вставить текст: {error}. Он сохранён — вставьте его командой «Вставить последнее»",
+    "insertError": "Активное окно сменилось — печать прервана, остаток текста не отправлен",
+    "adminWindow": "Администратор: Командная строка - ssh deploy@srv-analytics-02"
+  },
+  "learnSamples": [
+    {
+      "variant": "ноушен",
+      "term": "Notion"
+    },
+    {
+      "variant": "мета бейз",
+      "term": "Metabase"
+    },
+    {
+      "variant": "github",
+      "term": "GitHub"
+    },
+    {
+      "variant": "Сёма",
+      "term": "Сема"
+    },
+    {
+      "variant": "джира",
+      "term": "Jira"
+    },
+    {
+      "variant": "клик хауз",
+      "term": "ClickHouse"
+    }
+  ],
+  "broadcastTargets": [
+    "srv-analytics-02",
+    "srv-etl-01",
+    "dev-box"
+  ],
+  "titleRules": [
+    {
+      "process": "mstsc.exe",
+      "title": "srv-etl",
+      "insert_mode": "type",
+      "style": "as_is"
+    },
+    {
+      "process": "chrome.exe",
+      "title": "Jira",
+      "insert_mode": null,
+      "style": "business"
+    },
+    {
+      "process": "*",
+      "title": "ChatGPT",
+      "insert_mode": null,
+      "style": "code"
+    }
+  ],
+  "aiModels": {
+    "main": "anthropic/claude-haiku-4.5",
+    "other": [
+      "google/gemini-2.5-flash",
+      "anthropic/claude-sonnet-4.5"
+    ]
+  },
+  "vocab": [
+    {
+      "word": "ClickHouse",
+      "count": 214,
+      "apps": {
+        "telegram.exe": 61,
+        "cursor.exe": 48,
+        "obsidian.exe": 37,
+        "chrome.exe": 40,
+        "mstsc.exe": 28
+      }
+    },
+    {
+      "word": "Metabase",
+      "count": 167,
+      "apps": {
+        "chrome.exe": 70,
+        "telegram.exe": 52,
+        "mstsc.exe": 45
+      }
+    },
+    {
+      "word": "витрину",
+      "count": 121,
+      "apps": {
+        "telegram.exe": 70,
+        "outlook.exe": 51
+      }
+    },
+    {
+      "word": "мерчантов",
+      "count": 96,
+      "apps": {
+        "telegram.exe": 60,
+        "outlook.exe": 36
+      }
+    },
+    {
+      "word": "Grafana",
+      "count": 88,
+      "apps": {
+        "obsidian.exe": 40,
+        "slack.exe": 48
+      }
+    },
+    {
+      "word": "Павел",
+      "count": 74,
+      "apps": {
+        "outlook.exe": 60,
+        "telegram.exe": 14
+      }
+    },
+    {
+      "word": "план-факт",
+      "count": 69,
+      "apps": {
+        "outlook.exe": 44,
+        "winword.exe": 25
+      }
+    },
+    {
+      "word": "Parquet",
+      "count": 57,
+      "apps": {
+        "chrome.exe": 30,
+        "cursor.exe": 27
+      }
+    },
+    {
+      "word": "merchant_id",
+      "count": 52,
+      "apps": {
+        "code.exe": 30,
+        "cursor.exe": 22
+      }
+    },
+    {
+      "word": "Jira",
+      "count": 49,
+      "apps": {
+        "chrome.exe": 49
+      }
+    },
+    {
+      "word": "CTE",
+      "count": 44,
+      "apps": {
+        "code.exe": 30,
+        "cursor.exe": 14
+      }
+    },
+    {
+      "word": "дашборд",
+      "count": 41,
+      "apps": {
+        "chrome.exe": 21,
+        "telegram.exe": 20
+      }
+    },
+    {
+      "word": "Анна",
+      "count": 38,
+      "apps": {
+        "telegram.exe": 38
+      }
+    },
+    {
+      "word": "cleanup()",
+      "count": 35,
+      "apps": {
+        "cursor.exe": 35
+      }
+    },
+    {
+      "word": "Airflow",
+      "count": 33,
+      "apps": {
+        "slack.exe": 18,
+        "mstsc.exe": 15
+      }
+    },
+    {
+      "word": "DWH",
+      "count": 31,
+      "apps": {
+        "slack.exe": 31
+      }
+    },
+    {
+      "word": "регламент",
+      "count": 29,
+      "apps": {
+        "winword.exe": 29
+      }
+    },
+    {
+      "word": "Bedrock",
+      "count": 27,
+      "apps": {
+        "cursor.exe": 27
+      }
+    },
+    {
+      "word": "SberPay",
+      "count": 24,
+      "apps": {
+        "telegram.exe": 12,
+        "outlook.exe": 12
+      }
+    },
+    {
+      "word": "эквайринг",
+      "count": 22,
+      "apps": {
+        "outlook.exe": 22
+      }
+    },
+    {
+      "word": "srv-etl-01",
+      "count": 21,
+      "apps": {
+        "mstsc.exe": 21
+      }
+    },
+    {
+      "word": "Кузнецов",
+      "count": 19,
+      "apps": {
+        "outlook.exe": 19
+      }
+    },
+    {
+      "word": "Superset",
+      "count": 17,
+      "apps": {
+        "chrome.exe": 17
+      }
+    },
+    {
+      "word": "pandas",
+      "count": 16,
+      "apps": {
+        "cursor.exe": 16
+      }
+    },
+    {
+      "word": "сверка",
+      "count": 15,
+      "apps": {
+        "outlook.exe": 15
+      }
+    },
+    {
+      "word": "OpenRouter",
+      "count": 14,
+      "apps": {
+        "cursor.exe": 14
+      }
+    },
+    {
+      "word": "Slack",
+      "count": 12,
+      "apps": {
+        "telegram.exe": 12
+      }
+    },
+    {
+      "word": "витрина_комиссий",
+      "count": 11,
+      "apps": {
+        "code.exe": 11
+      }
+    },
+    {
+      "word": "Дежурные",
+      "count": 10,
+      "apps": {
+        "telegram.exe": 10
+      }
+    },
+    {
+      "word": "Obsidian",
+      "count": 9,
+      "apps": {
+        "obsidian.exe": 9
+      }
+    },
+    {
+      "word": "Lakehouse",
+      "count": 8,
+      "apps": {
+        "chrome.exe": 8
+      }
+    },
+    {
+      "word": "Tableau",
+      "count": 7,
+      "apps": {
+        "chrome.exe": 7
+      }
+    },
+    {
+      "word": "dbt",
+      "count": 7,
+      "apps": {
+        "cursor.exe": 7
+      }
+    },
+    {
+      "word": "Смирнова",
+      "count": 6,
+      "apps": {
+        "telegram.exe": 6
+      }
+    },
+    {
+      "word": "Kafka",
+      "count": 6,
+      "apps": {
+        "slack.exe": 6
+      }
+    },
+    {
+      "word": "uptime",
+      "count": 5,
+      "apps": {
+        "mstsc.exe": 5
+      }
+    },
+    {
+      "word": "SLA",
+      "count": 5,
+      "apps": {
+        "outlook.exe": 5
+      }
+    }
+  ],
+  "vocabExcluded": [
+    "дашборд",
+    "Slack"
+  ]
+}

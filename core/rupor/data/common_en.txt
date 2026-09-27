@@ -1,0 +1,180 @@
+# Частые английские слова (≈ 2000) — для отсева общеупотребительных слов в личном
+# словаре частот (rupor.vocab) в английских диктовках. Слово совпадает со списком по форме
+# или без простых окончаний (-s, -es, -ed, -ing, -ly). Составлен вручную по частотным
+# словарям английского. Строки через пробел, «#» — комментарий.
+
+the be am is are was were been being to of and a an in that have has had having i it for
+not on with he as you do does did done doing at this but his by from they we say says said
+her she or will my one all would there their what so up out if about who get gets got
+gotten getting which go goes went gone going me when make makes made making can like time
+no just him know knows knew known take takes took taken people into year your good some
+could them see sees saw seen other than then now look looks looked only come comes came its
+over think thinks thought also back after use uses used two how our work first well way
+even new want wants wanted because any these give gives gave given day most us is isn
+don doesn didn aren wasn weren won wouldn couldn shouldn can cannot ll ve re s t d m
+very much more many such here where why yes yeah ok okay oh hi hello hey bye goodbye
+please thanks thank sorry excuse welcome sure fine great nice cool right wrong true false
+should may might must shall need needs needed let lets let's thing things something
+nothing anything everything someone anyone everyone nobody somebody anybody everybody
+somewhere anywhere everywhere nowhere always never sometimes often usually already still
+yet again once twice ever soon later today tomorrow yesterday tonight morning evening
+night afternoon week weeks month months year years hour hours minute minutes second seconds
+moment moments while during before since until till ago next last previous early late
+each every both few little less least lot lots several enough another same different
+own own own own
+
+# глаголы
+ask asks asked asking tell tells told telling call calls called calling feel feels felt
+feeling try tries tried trying leave leaves left leaving put puts putting mean means meant
+keep keeps kept keeping begin begins began begun beginning seem seems seemed help helps
+helped helping talk talks talked talking turn turns turned turning start starts started
+starting show shows showed shown showing hear hears heard hearing play plays played playing
+run runs ran running move moves moved moving live lives lived living believe believes
+believed hold holds held holding bring brings brought bringing happen happens happened
+write writes wrote written writing provide provides provided sit sits sat sitting stand
+stands stood standing lose loses lost losing pay pays paid paying meet meets met meeting
+include includes included including continue continues continued set sets setting learn
+learns learned learnt learning change changes changed changing lead leads led leading
+understand understands understood watch watches watched watching follow follows followed
+following stop stops stopped stopping create creates created creating speak speaks spoke
+spoken speaking read reads reading allow allows allowed add adds added adding spend spends
+spent spending grow grows grew grown growing open opens opened opening walk walks walked
+walking win wins won winning offer offers offered offering remember remembers remembered
+love loves loved loving consider considers considered appear appears appeared buy buys
+bought buying wait waits waited waiting serve serves served die dies died dying send sends
+sent sending expect expects expected build builds built building stay stays stayed fall
+falls fell fallen falling cut cuts cutting reach reaches reached kill kills killed remain
+remains remained suggest suggests suggested raise raises raised pass passes passed passing
+sell sells sold selling require requires required report reports reported decide decides
+decided pull pulls pulled return returns returned explain explains explained hope hopes
+hoped hoping develop develops developed carry carries carried break breaks broke broken
+receive receives received agree agrees agreed support supports supported hit hits hitting
+produce produces produced eat eats ate eaten eating cover covers covered catch catches
+caught draw draws drew drawn choose chooses chose chosen cause causes caused point points
+pointed listen listens listened realize realizes realized place places placed close closes
+closed closing involve involves involved thank thanks thanked forget forgets forgot
+forgotten check checks checked checking fix fixes fixed fixing update updates updated
+updating send save saves saved saving delete deletes deleted deleting find finds found
+finding need give make take share shares shared sharing plan plans planned planning
+finish finishes finished finishing complete completes completed test tests tested testing
+review reviews reviewed prepare prepares prepared discuss discusses discussed schedule
+scheduled confirm confirms confirmed reply replies replied answer answers answered
+contact contacts contacted join joins joined miss misses missed move sign signs signed
+drive drives drove driven driving fly flies flew flown travel travels traveled travelled
+sleep sleeps slept wake wakes woke cook cooks cooked wash washes washed clean cleans
+cleaned wear wears wore worn teach teaches taught study studies studied fill fills filled
+pick picks picked drop drops dropped push pushes pushed attach attached apply applies
+applied accept accepts accepted refuse refused prefer prefers preferred manage manages
+managed handle handles handled solve solves solved improve improves improved increase
+increases increased reduce reduces reduced compare compares compared describe describes
+described mention mentions mentioned notice notices noticed imagine imagined enjoy enjoys
+enjoyed worry worries worried wonder wonders wondered guess guesses guessed suppose
+supposed seem hate hates hated wish wishes wished care cares cared matter matters mattered
+belong belongs depend depends depended exist exists existed happen
+
+# существительные
+person persons man men woman women child children kid kids boy girl friend friends family
+parent parents father mother dad mom mum brother sister son daughter husband wife baby
+guy guys team teams group groups company companies business businesses job jobs work
+office offices home house houses room rooms door doors window windows table tables chair
+place places world country countries city cities town street road state states area areas
+part parts side sides end ends case cases point points fact facts problem problems
+question questions answer answers idea ideas reason reasons issue issues example examples
+information data number numbers system systems program programs service services product
+products project projects plan plans process result results level levels order orders
+change changes form forms kind kinds type types sort way ways thing things stuff name
+names word words line lines page pages book books story stories letter letters email
+emails message messages note notes list lists file files document documents report
+reports meeting meetings call calls phone phones mail news paper papers picture pictures
+photo photos video videos music game games sport sports movie movies film films show
+money price prices cost costs pay payment payments bill bills account accounts bank
+market markets store stores shop shops customer customers client clients user users
+member members manager managers boss staff employee employees worker workers
+school schools student students teacher teachers class classes course courses lesson
+lessons university college education research study studies science history art
+health doctor doctors hospital care body head face eye eyes hand hands arm arms leg legs
+foot feet heart mind life lives death love fun luck help problem power war peace law
+government party parties policy president minister police court rule rules right rights
+job task tasks goal goals step steps stage stages detail details feature features
+issue version versions update updates change release deadline status progress feedback
+support request requests response responses reply topic topics subject subjects
+food water coffee tea lunch dinner breakfast meal car cars bus train plane trip
+travel weather rain snow sun summer winter spring autumn fall air fire tree trees
+dog dogs cat cats animal animals
+monday tuesday wednesday thursday friday saturday sunday january february march april
+may june july august september october november december weekend holiday holidays
+morning afternoon evening night today tonight week month year date time times hour
+minute second moment period season century future past present
+beginning middle top bottom front back left right north south east west inside outside
+number amount percent half quarter piece pieces lot couple group set pair
+voice sound noise light color colour size space line shape
+question sense matter experience knowledge skill skills attention interest
+energy effort chance risk choice decision opinion view idea truth reality
+english russian american british german french spanish chinese japanese european
+
+# прилагательные
+good better best bad worse worst big bigger biggest small smaller smallest large larger
+great little long longer short shorter high higher low lower old older young younger new
+newer early earlier late later important public private able unable free full empty
+easy easier hard harder difficult simple clear sure certain possible impossible real
+whole main major minor local national international social political economic human
+general special common usual normal strange different similar same other own next last
+first second third final fine nice happy sad glad sorry ready busy open closed available
+current recent past future present previous following top bottom left right single
+double quick fast slow slower quiet loud hot cold warm cool dark light bright white black
+red green blue yellow brown gray grey pink orange purple beautiful pretty ugly rich poor
+cheap expensive safe dangerous true false correct incorrect wrong right exact actual
+basic simple complex specific particular personal official final total whole entire
+necessary important useful useless interesting boring amazing awesome terrible horrible
+wonderful perfect excellent huge tiny wide narrow deep strong weak heavy thick thin
+tired sick healthy alive dead serious funny crazy weird
+urgent quick short long clear latest newest oldest
+
+# наречия и служебные
+really actually probably maybe perhaps almost quite rather pretty too also either neither
+instead however therefore anyway otherwise besides though although unless whether
+together away around along across through throughout within without against toward
+towards upon onto into out off above below under between among behind beside near far
+inside outside down up over back forward ahead here there where everywhere somewhere
+exactly especially simply finally basically generally usually certainly definitely
+absolutely completely totally fully nearly hardly barely mostly mainly quickly slowly
+easily directly immediately recently currently already soon still just only even ever
+never please thanks
+
+# ещё частые слова
+able about above accept according across act action activity actually address admit adult
+affect afraid age agency agent ago agreement ahead air allow alone along already although
+among analysis animal annual anyone anything apartment approach argue argument arrive
+article artist aspect assume attack attempt attend audience author avoid award aware
+baby bag ball bar base bear beat bed behavior benefit beyond billion bird bit blood board
+boat born box brain branch bread brief brother budget building burn cake camera campaign
+cancer candidate capital card career carry cash cell center central chair challenge
+chance character charge chief choice church citizen civil claim clearly coach coat
+collection come commercial community compare computer concern condition conference
+congress consumer contain content context control conversation corner could council
+count couple crime cultural culture cup dark deal debate decade deep defense degree
+democratic design despite determine difference dinner direction director discover
+discussion disease doctor dream drug east economy edge effect effort eight either
+election else employee enemy environment environmental especially establish evening event
+everybody evidence exactly executive expert eye factor fail fear federal fee field fight
+figure financial firm fish five floor focus foreign forget former forward four friendly
+fund garden gas generation glass green ground growth gun hair hang heat heavy herself
+himself hold hotel huge hundred identify image impact individual industry inside instead
+institution interview investment itself key kitchen lady land language large law lawyer
+lay leader leg likely listen loss machine magazine maintain majority manage material
+measure media medical member memory method middle military million mind minute mission
+model modern moment mouth movement nature near nearly network nice none nor north note
+occur off officer oil once operation opportunity option organization others outside owner
+page pain painter paper partner past patient pattern peace perform performance perhaps
+physical plant player PM AM population position positive pressure prevent private probably
+production professional property protect prove purpose quality quickly race radio range
+rate reality recognize record region relate relationship religious remove represent
+resource respond rest reveal rise rock role rule scene science score sea season seat
+section security senior series serious sense seven share she shoot short shot shoulder
+significant sing sister skin smile society soldier somebody son source south southern
+speech spend staff star statement station step stock strategy structure style success
+successful summer surface system talk tax technology television ten tend term thank
+theory third thousand threat throw thus total tough toward trade traditional training
+treat treatment trial trouble truth TV unit until value various victim view violence
+visit wall watch weapon weight west western whatever whole whom whose wide wife wind
+within wonder worker writer yard yourself
