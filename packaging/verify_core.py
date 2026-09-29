@@ -66,6 +66,9 @@ def verify(exe: Path, runner: tuple[str, ...] = ()) -> tuple[bool, str]:
         if line and "локализация:" not in summary:
             return False, ("ядро без английского языка (в самопроверке нет «локализация») — "
                            "это старая сборка; пересоберите: build.cmd core")
+        if line and "орфография:" not in summary:
+            return False, ("ядро без похожих написаний словаря (в самопроверке нет "
+                           "«орфография») — это старая сборка; пересоберите: build.cmd core")
         if r.returncode != 0 or "своё поле: ok" not in summary:
             return False, f"самопроверка не прошла (код {r.returncode}): {summary or 'нет строки в логе'}"
         if "частотные списки: ok" not in summary:
@@ -76,7 +79,10 @@ def verify(exe: Path, runner: tuple[str, ...] = ()) -> tuple[bool, str]:
         if "локализация: ok" not in summary:
             return False, ("в сборке нет каталогов сообщений rupor/locales/*.json или их ключи "
                            f"разошлись (packaging\\rupor-core.spec): {summary}")
-        leftovers = [p for p in dirs["temp"].rglob("*") if p.is_file()]
+        if "орфография: ok" not in summary:
+            return False, ("проверка орфографии Windows в сборке не работает (comtypes, "
+                           f"rupor.spell): {summary}")
+        leftovers =[p for p in dirs["temp"].rglob("*") if p.is_file()]
         if leftovers:
             return False, (f"ядро записало {len(leftovers)} файл(ов) во временную папку — "
                            "похоже, обёртки comtypes нет в сборке (packaging\\rupor-core.spec)")

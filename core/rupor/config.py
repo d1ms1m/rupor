@@ -138,6 +138,9 @@ class Settings:
     add_trailing_space: bool = True
     # Словарь учится на правках вставленного текста (UI Automation): auto | suggest | off
     learn_mode: str = "auto"
+    # Похожие написания терминов словаря (fuzzy.py): «Xena браузер» → ZennoBrowser без
+    # списка вариантов
+    dict_fuzzy: bool = True
     # Подсказка распознаванию: частые слова из истории и текст перед курсором в окне
     vocab_enabled: bool = True
     context_enabled: bool = True
@@ -532,6 +535,7 @@ _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "broadcast_excluded": _str_list(2000),
     "add_trailing_space": _bool,
     "learn_mode": _choice(LEARN_MODES),
+    "dict_fuzzy": _bool,
     "vocab_enabled": _bool,
     "context_enabled": _bool,
     "duck_mode": _choice(DUCK_MODES),

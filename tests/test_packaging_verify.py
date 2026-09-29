@@ -42,8 +42,11 @@ d.mkdir(parents=True)
        else ", Core Audio: ok, сессий 7")
     + ("" if os.environ.get("FAKE", "") in ("NOAUDIO", "OLDSELFTEST", "NOLOCALES")
        else ", локализация: нет (ru 370, en 0)" if "BADLOCALES" in os.environ.get("FAKE", "")
-       else ", локализация: ok (ru 370, en 370)") + "\n", encoding="utf-8")
-if os.environ.get("FAKE", "") in ("BADAUDIO", "BADLOCALES"):
+       else ", локализация: ok (ru 370, en 370)")
+    + ("" if os.environ.get("FAKE", "") in ("NOAUDIO", "OLDSELFTEST", "NOLOCALES", "NOSPELL")
+       else ", орфография: ошибка (API недоступно)" if "BADSPELL" in os.environ.get("FAKE", "")
+       else ", орфография: ok (ru да, en да)") + "\n", encoding="utf-8")
+if os.environ.get("FAKE", "") in ("BADAUDIO", "BADLOCALES", "BADSPELL"):
     sys.exit(1)
 if "LITTER" in os.environ.get("FAKE", ""):
     (pathlib.Path(os.environ["TEMP"]) / "comtypes_gen.py").write_text("x")
@@ -62,6 +65,21 @@ def test_fresh_core_passes(tmp_path: Path) -> None:
     assert ok, why
     assert "своё поле: ok" in why and "Core Audio: ok, сессий 7" in why
     assert "локализация: ok (ru 370, en 370)" in why
+    assert "орфография: ok (ru да, en да)" in why
+
+
+def test_core_without_spell_is_rejected_as_old(tmp_path: Path,
+                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE", "NOSPELL")
+    ok, why = vc.verify(_fake(tmp_path, GOOD), runner=(sys.executable,))
+    assert not ok and "старая сборка" in why and "орфография" in why
+
+
+def test_core_with_broken_spell_is_rejected(tmp_path: Path,
+                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE", "BADSPELL")
+    ok, why = vc.verify(_fake(tmp_path, GOOD), runner=(sys.executable,))
+    assert not ok and "орфография: ошибка" in why
 
 
 def test_old_core_is_rejected(tmp_path: Path) -> None:

@@ -310,6 +310,7 @@
   "setting.copy_last_hotkey": "“Copy last” shortcut",
   "setting.default_style": "Default style",
   "setting.device": "Device",
+  "setting.dict_fuzzy": "Recognize similar spellings",
   "setting.dictation_language": "Dictation language",
   "setting.double_tap_ms": "Double-press interval",
   "setting.duck_level": "Volume while recording",

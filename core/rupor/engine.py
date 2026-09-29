@@ -7,12 +7,16 @@
 
 Поток одной диктовки:
   1. ASR → raw;
-  2. apply_dictionary → expand_snippets (сработал сниппет — ИИ пропускается);
+  2. словарь (_dict_apply: точные варианты, затем, если dict_fuzzy, похожие по звучанию
+     написания терминов — fuzzy.py) → expand_snippets (сработал сниппет — ИИ пропускается);
   3. стиль = правило приложения → default_style; ИИ, если включён, стиль ≠ as_is,
      слов ≥ ai_min_words и есть ключ провайдера:
        wait      — состояние "ai", ошибка/таймаут → вставить текст без ИИ + notice;
        raw_first — сразу вставить, ИИ в фоне; по приходу заменить (Shift+← и печать),
                    только если после вставки не было нажатий и окно то же;
+     ответ ИИ ещё раз проходит через словарь — словарь пользователя последнее слово, а
+     ошибки распознавания (всё, что словарь заменил бы термином) не попадают ни в
+     подсказку Whisper, ни в термины ИИ;
   4. вставка, событие result, история (если включена) и статистика (всегда);
   5. обучение словаря: до минуты следим за полем, куда вставили текст (UI Automation),
      и правки, похожие на ошибку распознавания («метабейс» → Metabase), добавляем
@@ -42,13 +46,14 @@ import os
 import queue
 import threading
 import time
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 import numpy as np
 
-from . import (ai, audio, broadcast, config, credman, duck, fetch, i18n, inject, learn,
-               sounds, textproc, uia, vocab, winutil)
+from . import (ai, audio, broadcast, config, credman, duck, fetch, fuzzy, i18n, inject,
+               learn, sounds, spell, textproc, uia, vocab, winutil)
 from . import _win
 from ._win import VK_RIGHT
 from .asr import SAMPLE_RATE, ModelMissing, Recognizer, Result, cuda_device_count, gpu_info
@@ -1261,6 +1266,27 @@ class Engine:
             log.exception("Не удалось прочитать словарь")
             return []
 
+    def _dict_apply(self, text: str, items: list[dict[str, Any]]) -> str:
+        """Словарь целиком: точные варианты и, если dict_fuzzy, похожие по звучанию
+        написания терминов (fuzzy.py). Сколько похожих заменено — в лог (без слов)."""
+        out, n = fuzzy.apply(text, items, self.s.dict_fuzzy, self._user_words())
+        if n:
+            log.info("Словарь: похожих написаний исправлено %d", n)
+        return out
+
+    def _user_words(self) -> frozenset[str]:
+        """Слова, которые пользователь сам часто диктует (строчная кириллица из словаря частот,
+        ключи форм vocab.group_key): для похожих написаний они настоящие («гео ноды» не
+        станет GeoNode). Словарь частот ещё собирается или недоступен — пусто."""
+        if not self.s.dict_fuzzy:
+            return frozenset()
+        try:
+            words = self.storage.vocab_words(None) if self.storage.vocab_ready else []
+        except Exception:
+            log.debug("Частые слова для похожих написаний недоступны", exc_info=True)
+            return frozenset()
+        return frozenset(w.key for w in words if not w.strong and vocab.eligible(w))
+
     def _snippets(self) -> list[dict[str, Any]]:
         try:
             return self.storage.snippets_list()
@@ -1279,7 +1305,7 @@ class Engine:
         for sn in snips:
             trig = sn.get("trigger")
             if isinstance(trig, str):
-                norm = textproc.apply_dictionary(trig, items)
+                norm = fuzzy.apply_text(trig, items, self.s.dict_fuzzy, self._user_words())
                 if norm != trig:
                     extra.append({"trigger": norm, "text": sn.get("text")})
         return snips + extra
@@ -1290,15 +1316,23 @@ class Engine:
         токенизатор загруженной модели — faster-whisper молча срезает начало подсказки
         длиннее 223 токенов). Собирается перед каждым распознаванием: выученный термин
         попадает в подсказку со следующей же диктовки, новые частые слова — как только
-        обновится их кэш (в фоне, сразу после записи истории)."""
+        обновится их кэш (в фоне, сразу после записи истории).
+
+        Ошибки распознавания из словаря (его варианты) в подсказку не попадают: ни частым
+        словом (ошибка из истории, записанной до словаря), ни термином настроек, а контекст
+        окна идёт уже исправленным словарём — иначе подсказка сама учила бы Whisper ошибке."""
         s = self.s
         job: _Job | None = getattr(self._prompt_local, "job", None)
-        terms: list[object] = [*s.terms, *(d.get("term") for d in self._dict_items())]
+        items = self._dict_items()
+        bad = fuzzy.misrecognition_filter(items, s.dict_fuzzy)
+        terms: list[object] = [*(t for t in s.terms if bad is None or not bad(str(t))),
+                               *(d.get("term") for d in items)]
         proc_words: list[str] = []
         gen_words: list[str] = []
         if s.vocab_enabled:
             try:
-                proc_words, gen_words = self.storage.vocab_prompt_words(self._vocab_app(job))
+                proc_words, gen_words = self.storage.vocab_prompt_words(self._vocab_app(job),
+                                                                        reject=bad)
             except Exception:
                 log.exception("Не удалось прочитать частые слова")
         ctx: str | None = None
@@ -1306,6 +1340,8 @@ class Engine:
                 and not job.sess.broadcast and job.sess.context_done.is_set()
                 and job.target is not None and job.target.pid == job.sess.context_pid):
             ctx = job.sess.context      # окно то же, где нажали диктовку
+            if ctx:
+                ctx = fuzzy.apply_text(ctx, items, s.dict_fuzzy, self._user_words())
         counter: vocab.TokenCounter | None = None
         get_counter = getattr(self.rec, "token_counter", None)
         if callable(get_counter):
@@ -1329,13 +1365,15 @@ class Engine:
         return job.target.process.lower() if job.target is not None else None
 
     def _ai_terms(self, items: list[dict[str, Any]], job: _Job) -> list[str]:
-        """Термины для промпта ИИ-очистки: словарь + частые термины и имена пользователя."""
+        """Термины для промпта ИИ-очистки: словарь + частые термины и имена пользователя,
+        кроме ошибок распознавания из словаря (иначе ИИ «исправлял» бы на них)."""
         terms = [str(d["term"]) for d in items]
         if not self.s.vocab_enabled:
             return terms
         try:
-            proc, gen = self.storage.vocab_prompt_words(self._vocab_app(job),
-                                                        vocab.MAX_AI_WORDS, strong_only=True)
+            proc, gen = self.storage.vocab_prompt_words(
+                self._vocab_app(job), vocab.MAX_AI_WORDS, strong_only=True,
+                reject=fuzzy.misrecognition_filter(items, self.s.dict_fuzzy))
         except Exception:
             log.exception("Не удалось прочитать частые слова")
             return terms
@@ -1587,10 +1625,16 @@ class Engine:
 
     def ai_test(self, text: str, style: str) -> ai.AIResult:
         """Кнопка «Проверить очистку» (WS ai_test) — тоже вызов ИИ с записью расхода. Язык
-        текста (для английского промпта) — по буквам: есть кириллица — ru, иначе en."""
-        terms = [str(d["term"]) for d in self._dict_items()]
+        текста (для английского промпта) — по буквам: есть кириллица — ru, иначе en.
+        Словарь — как в диктовке: до ИИ и после."""
+        items = self._dict_items()
+        terms = [str(d["term"]) for d in items]
         kw = _cleanup_kwargs(i18n.text_language(text))
-        return self._ai_call("test", "", lambda: ai.cleanup(text, style, self.s, terms, **kw))
+        uw = self._user_words()
+        src = fuzzy.apply_text(text, items, self.s.dict_fuzzy, uw)
+        r = self._ai_call("test", "", lambda: ai.cleanup(src, style, self.s, terms, **kw))
+        return dataclasses.replace(r, text=fuzzy.apply_text(r.text, items, self.s.dict_fuzzy,
+                                                            uw))
 
     def ai_usage_stats(self) -> dict[str, Any]:
         return self.storage.ai_usage_stats()
@@ -1671,7 +1715,7 @@ class Engine:
             return
         s = self.s
         items = self._dict_items()
-        text = textproc.apply_dictionary(raw, items)
+        text = self._dict_apply(raw, items)
         text, snippet_used = textproc.expand_snippets(text, self._snippets_for(items))
         style = resolve_style(job.target, s)
         use_ai = self._want_ai(text, style, snippet_used)
@@ -1692,6 +1736,10 @@ class Engine:
             finally:
                 with self._lock:
                     self._ai_busy = False
+        if ai_used:
+            # Словарь — последнее слово: ИИ мог вернуть написание, которое пользователь
+            # занёс в словарь как ошибку
+            final = self._dict_apply(final, items)
         out = finalize_text(final, s.add_trailing_space)
         latency = (time.perf_counter() - job.t_release) * 1000
         log.info("От отпускания до вставки: %.0f мс (аудио %.1f с%s)", latency, res.audio_s,
@@ -1792,7 +1840,8 @@ class Engine:
             self._record(ctx.job, ctx.res, ctx.raw, ctx.text, ctx.style, False, ctx.latency_ms,
                          ctx.delivery)
             return
-        self._jobs.put(("replace", (ctx, r.text)))
+        # словарь — последнее слово и после ИИ (см. _process)
+        self._jobs.put(("replace", (ctx, self._dict_apply(r.text, self._dict_items()))))
 
     def _do_replace(self, ctx: _RawFirst, cleaned: str) -> None:
         s = self.s
@@ -1842,6 +1891,8 @@ class Engine:
     def _command_flow(self, job: _Job, res: Result, raw: str) -> None:
         s = self.s
         target = job.target
+        # Инструкция — точным словарём: похожие написания могли бы переписать слово,
+        # которое пользователь назвал в команде как есть («исправь Xenoposter на …»)
         instruction = textproc.apply_dictionary(raw, self._dict_items())
         if target is None:
             self.notice(tr("eng.cmd_no_window"), level="warn")
@@ -1996,7 +2047,7 @@ class Engine:
             with self._lock:
                 self._busy = max(0, self._busy - 1)
             self._refresh_state(force=True)
-        text = textproc.apply_dictionary(res.text.strip(), self._dict_items())
+        text = self._dict_apply(res.text.strip(), self._dict_items())
         if text and self.s.history_enabled:
             try:
                 saved = self.storage.add_history({   # подписи — history_display
@@ -2206,6 +2257,8 @@ class Engine:
 
     def _idle_loop(self) -> None:
         self._purge(force=True)
+        if self.s.dict_fuzzy:
+            spell.warm_up()                # словари Windows — до первой диктовки
         try:
             # после миграции или новой версии отбора слов — пересобрать частоты по истории
             # (до конца пересборки подсказка распознаванию — без частых слов)

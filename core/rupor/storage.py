@@ -1297,18 +1297,21 @@ class Storage:
             self._vocab_ex = None
 
     def vocab_prompt_words(self, process: str | None, limit: int = vocab.MAX_FREQ_WORDS,
-                           strong_only: bool = False) -> tuple[list[str], list[str]]:
+                           strong_only: bool = False,
+                           reject: Callable[[str], bool] | None = None
+                           ) -> tuple[list[str], list[str]]:
         """Частые слова для подсказки: (слова процесса, общие) без исключённых, только
         достаточно частые, всего не больше limit. strong_only — только термины и имена
-        (для промпта ИИ-очистки) — из того же кэша, без второго подсчёта. Пока частоты
-        пересобираются (vocab_ready = False) — пусто."""
+        (для промпта ИИ-очистки) — из того же кэша, без второго подсчёта. reject — без
+        ошибок распознавания из словаря (vocab.pick_words). Пока частоты пересобираются
+        (vocab_ready = False) — пусто."""
         if self._vocab_pending:
             return [], []
         with self._lock:
             proc = self._vocab_words_locked(_vocab_app(process)) if process else []
             gen = self._vocab_words_locked(_ALL_APPS)
             ex = self._vocab_excluded_locked()
-        return vocab.pick_words(proc, gen, ex, limit, strong_only)
+        return vocab.pick_words(proc, gen, ex, limit, strong_only, reject)
 
 
 _Sum4 = tuple[int, int, int, float]

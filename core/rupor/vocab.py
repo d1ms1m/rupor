@@ -791,10 +791,13 @@ def build_prompt(context: str | None, terms: Iterable[object],
 
 def pick_words(process_words: Sequence[Word], general_words: Sequence[Word],
                excluded: Iterable[str], limit: int = MAX_FREQ_WORDS,
-               strong_only: bool = False) -> tuple[list[str], list[str]]:
+               strong_only: bool = False,
+               reject: Callable[[str], bool] | None = None) -> tuple[list[str], list[str]]:
     """Частые слова для подсказки: (слова процесса, общие) без исключённых (excluded —
     как в vocab_excluded: fold слова; действует на все формы — см. excluded_keys), только
-    достаточно частые; всего не больше limit.
+    достаточно частые; всего не больше limit. reject(слово) → True — слово пропускается и
+    места в limit не занимает (ошибки распознавания из словаря пользователя —
+    textproc.misrecognition_filter).
 
     Порядок: сильные слова процесса → сильные общие → слабые (редкие строчные) процесса →
     слабые общие; слабых — не больше MAX_WEAK_WORDS: термины и имена важнее, а частое
@@ -811,7 +814,8 @@ def pick_words(process_words: Sequence[Word], general_words: Sequence[Word],
                 if sum(len(x) for x in out) >= limit:
                     return out
                 if (w.strong != strong or w.key in seen or not eligible(w)
-                        or is_excluded(w, keys)):
+                        or is_excluded(w, keys)
+                        or (reject is not None and reject(w.word))):
                     continue
                 if not strong:
                     if weak >= MAX_WEAK_WORDS:

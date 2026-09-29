@@ -222,6 +222,7 @@ const DEFAULT_SETTINGS: Settings = {
   broadcast_targets: [...DATA.ru.broadcastTargets],
   add_trailing_space: true,
   learn_mode: "auto",
+  dict_fuzzy: true,
   vocab_enabled: true,
   context_enabled: true,
   duck_mode: "duck",

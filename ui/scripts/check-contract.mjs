@@ -6,7 +6,7 @@
 // проходит те же сценарии, что и окна интерфейса (hello → get_state → stats_get →
 // history_list → расход ИИ → словарь (и его обучение на правках)/сниппеты → импорт/экспорт →
 // правила приложений и по названию окна → рассылка в RDP (белый список) → частые слова →
-// set_settings (в т.ч. learn_mode, duck_mode/duck_level, language/dictation_language) …),
+// set_settings (в т.ч. learn_mode, dict_fuzzy, duck_mode/duck_level, language/dictation_language) …),
 // и сверяет КАЖДЫЙ ответ и КАЖДОЕ событие с типами из src/lib/types.ts. Типы разбираются
 // TypeScript compiler API — отдельной схемы, которая может разойтись с types.ts, нет.
 // Поля, которые ядро присылает, а в types.ts их нет, выводятся предупреждением.
@@ -834,6 +834,18 @@ await step("vocab_enabled / context_enabled: true/false, неверное — о
     return `сейчас vocab=${prev.vocab_enabled}, context=${prev.context_enabled}; ${err}`;
   } finally {
     await call("set_settings", { patch: prev });
+  }
+});
+await step("dict_fuzzy (похожие написания): true/false, неверное — ошибка на языке интерфейса", async () => {
+  const prev = settings.dict_fuzzy;
+  assert(typeof prev === "boolean", short({ dict_fuzzy: prev }));
+  try {
+    const s = await call("set_settings", { patch: { dict_fuzzy: !prev } });
+    assert(s.dict_fuzzy === !prev, "не применилось");
+    const err = await callErr("set_settings", { patch: { dict_fuzzy: "да" } });
+    return `сейчас dict_fuzzy=${prev}; ${err}`;
+  } finally {
+    await call("set_settings", { patch: { dict_fuzzy: prev } });
   }
 });
 

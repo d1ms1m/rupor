@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from rupor.textproc import (apply_dictionary, asr_prompt, count_words, expand_snippets, fold,
-                            normalize_phrase)
+                            misrecognition_filter, normalize_phrase)
 
 DICT: list[dict[str, Any]] = [
     {"id": 1, "term": "ClickHouse", "variants": ["клик хаус"]},
@@ -198,6 +198,29 @@ def test_dictionary_many_items() -> None:
 def test_dictionary_multiline_text_preserved() -> None:
     assert apply_dictionary("строка про клик хаус\nи вторая про метабейс\n", DICT) == \
         "строка про ClickHouse\nи вторая про Metabase\n"
+
+
+def test_dictionary_second_pass_is_stable() -> None:
+    """Словарь применяется и после ИИ: повторный проход по уже исправленному тексту
+    ничего не портит."""
+    for src in ("в клик хаусе и сбер банке", "апи гейтвей и апи", "графану в Grafana",
+                "ClickHouse, Metabase, Сбербанке, API Gateway"):
+        once = apply_dictionary(src, DICT)
+        assert apply_dictionary(once, DICT) == once
+
+
+def test_misrecognition_filter() -> None:
+    bad = misrecognition_filter([*DICT, {"term": "Zennoposter", "variants": ["Xenoposter"]}])
+    assert bad is not None
+    # варианты — ошибки распознавания, в любом регистре и падеже
+    for w in ("Xenoposter", "xenoposter", "метабейс", "графане", "Клик-Хаус", "сбер-банке"):
+        assert bad(w), w
+    # сами термины (в любом регистре и с падежом у кириллического) и прочие слова — нет
+    for w in ("Zennoposter", "zennoposter", "ClickHouse", "clickhouse", "Сбербанке", "сбербанке", "API",
+              "Kubernetes", "Тимур", ""):
+        assert not bad(w), w
+    assert misrecognition_filter([]) is None
+    assert misrecognition_filter([{"term": " "}, "мусор"]) is None  # type: ignore[list-item]
 
 
 # ---------- expand_snippets ----------

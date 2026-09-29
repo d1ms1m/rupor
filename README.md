@@ -65,7 +65,9 @@ The screenshots were taken in the interface's demo mode; all data in them is mad
 - **Command mode**: select some text, hold Ctrl+Win+Alt and say "make it more polite",
   "translate to German" or "cut it in half" — the selection is replaced with the result.
 - **Dictionary** of terms and spelling variants ("click house" → ClickHouse), with Russian case
-  endings handled. Dictionary terms are passed to recognition as hints.
+  endings handled. **One term is usually enough**: spellings that sound like it are recognized
+  on their own («Xena браузер», "Zenobowser" → ZennoBrowser). Dictionary terms are passed to
+  recognition as hints.
 - **The dictionary learns from your corrections.** Fix a word right after it's inserted and
   Rupor suggests (or adds right away) the replacement, so next time the word comes out right.
 - **Frequent words and context.** Names and terms from your dictations, as well as the text
@@ -263,6 +265,19 @@ launch (changes are written to `%APPDATA%\Rupor\duck.json` in advance).
   Replacement works on whole words, ignoring case (and ё/е in Russian), and handles Russian case
   endings («в клик хаусе» → «в ClickHouse»). Dictionary terms are passed to recognition as hints. The
   dictionary can be imported and exported as JSON.
+- **Similar spellings** (on by default, Dictionary → *Recognize similar spellings*): you add a
+  term once, and spellings that *sound* like it are fixed without a list of variants — Latin or
+  Cyrillic, joined or split, with Russian case endings: "Zenobowser", «Xena браузер»,
+  «в зенно браузере» → ZennoBrowser. Real words are never replaced — the Windows spell checker
+  (Russian and English) tells a misrecognition («кубернетис», "Xenoposter") from a word that
+  merely sounds like a term («курсор», «редис», "cloud"). Variants are only needed for errors
+  that sound nothing like the term, for terms made of two ordinary words («клик хаус») and for
+  very short terms (3 sounds or fewer). Words you often dictate yourself count as real words
+  too. Without the Windows spelling dictionaries only exact variants work. Paths, addresses and
+  file names are left alone; the spoken instruction in command mode uses exact variants only.
+  The dictionary always has the
+  last word: it's applied again after AI cleanup, and misrecognitions never go into the
+  recognition hint or the AI's term list.
 - **Learning from corrections.** After inserting, Rupor watches the input field for up to a
   minute (via Windows UI Automation: Notepad, Telegram Desktop, fields in Chromium-based browsers,
   Word). If you fix a word that was misrecognized ("meta base" → Metabase), the indicator shows a
@@ -391,6 +406,7 @@ Everything is configured in the Rupor window. You can also edit
 | `terms` | hint terms for recognition (dictionary terms are added to them) |
 | `insert_mode` | `auto` / `type` / `clipboard` |
 | `learn_mode` | learning from corrections: `auto` (default) / `suggest` / `off` |
+| `dict_fuzzy` | recognize spellings that sound like a dictionary term: `true` (default) / `false` |
 | `app_rules` | `{"telegram.exe": {"insert_mode": null, "style": "messenger"}}` |
 | `title_rules` | `[{"process": "chrome.exe", "title": "YouTube Studio", "insert_mode": null, "style": "business"}]` |
 | `type_delay_ms`, `rdp_type_delay_ms` | delay between characters when typing (0–30 ms) |
@@ -577,6 +593,7 @@ install-rupor.cmd  install your own build on this computer
 | `winutil.py` | active window, recognizing RDP windows, focus tracking, administrator rights |
 | `broadcast.py` | broadcasting to RDP sessions |
 | `storage.py`, `textproc.py` | SQLite (history, dictionary, AI spending, word frequencies); dictionary, snippets, word counting |
+| `fuzzy.py` | similar spellings of dictionary terms: sound key, matching 1–3 word fragments |
 | `vocab.py`, `data/` | frequent words: picking typical words, window context, recognition hint |
 | `learn.py`, `uia.py` | learning from corrections: comparing field text and reading the field via UI Automation |
 | `duck.py` | lowering other apps' audio while recording (Core Audio) |

@@ -4,6 +4,31 @@ All notable changes to Rupor are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Similar spellings: one dictionary term is enough.** Spellings that sound like a term are
+  fixed without listing variants — Latin or Cyrillic, joined or split, with Russian case endings:
+  "Zenobowser", «Xena браузер», «в зенно браузере» → ZennoBrowser. On by default; switch:
+  Dictionary → *Recognize similar spellings* (`dict_fuzzy`). Real words are never replaced:
+  the Windows spell checker (Russian and English) tells a misrecognition («кубернетис»,
+  "Xenoposter") from a word that merely sounds like a term («курсор», «редис», "cloud"). Terms
+  made of two ordinary words and very short terms still need a variant; words you often
+  dictate yourself count as real words; without the Windows spelling dictionaries only exact
+  variants work; paths, addresses and file names are left alone. Words it would replace are also kept out of the recognition hint
+  and the AI's term list. The build self-check now covers the spell checker.
+
+### Fixed
+
+- **The dictionary has the last word.** AI cleanup could put back a misrecognition that is in
+  the dictionary as a variant ("Xenoposter" instead of "Zennoposter"). The AI's reply now goes
+  through the dictionary again: in both AI modes and in the *Check cleanup* button.
+- A misrecognition that reached the history before it was added to the dictionary no longer
+  reinforces itself. Words the dictionary would replace are left out of the recognition hint
+  and of the AI's term list, and the text before the cursor used as a hint is corrected by the
+  dictionary first.
+
 ## [0.4.0] — 2026-09-27
 
 ### Added

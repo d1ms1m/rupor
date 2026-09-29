@@ -316,6 +316,7 @@
   "setting.copy_last_hotkey": "Сочетание «Скопировать последнее»",
   "setting.default_style": "Стиль по умолчанию",
   "setting.device": "Устройство",
+  "setting.dict_fuzzy": "Узнавать похожие написания",
   "setting.dictation_language": "Язык диктовки",
   "setting.double_tap_ms": "Интервал двойного нажатия",
   "setting.duck_level": "Громкость во время записи",

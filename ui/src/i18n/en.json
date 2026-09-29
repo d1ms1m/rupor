@@ -363,10 +363,16 @@
     },
     "notFound": "No terms match “{q}”.",
     "noVariants": "No variants — recognition hint only",
+    "noVariantsFuzzy": "No variants — matched by sound",
     "term": "Term",
     "termPlaceholder": "ClickHouse",
     "variants": "How it might be recognized",
     "variantsPlaceholder": "click house, clickhouse… Press Enter after each",
+    "variantsPlaceholderFuzzy": "Optional — Rupor fixes sound-alike errors on its own",
+    "fuzzy": {
+      "title": "Recognize similar spellings",
+      "hint": "Rupor fixes distorted spellings of a term by sound on its own — Latin or Cyrillic, joined or split, with Russian case endings: “Zenobowser”, “Xeno browser” → ZennoBrowser. Real words that merely sound like a term are left alone. Variants are only needed for errors that sound nothing like the term, terms made of two ordinary words and very short terms."
+    },
     "editorHint": "Enter to save (or to add the variant you're typing) · Ctrl+Enter to save now · Esc to cancel",
     "learn": {
       "title": "Learn from your corrections",

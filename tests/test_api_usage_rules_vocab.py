@@ -77,6 +77,7 @@ def test_failed_cleanup_is_recorded_with_zero_cost(env: Env) -> None:
     row = usage_rows(env)[0]
     assert (row["ok"], row["error_kind"], row["cost_usd"]) == (0, "timeout", 0.0)
     assert (row["provider"], row["model"]) == ("openrouter", "anthropic/claude-haiku-4.5")
+    wait_until(lambda: bool(env.calls.delivered))   # ai_usage приходит раньше вставки
     assert env.calls.delivered == [("длинная фраза для очистки ИИ ", False)]  # текст цел
     c.close()
 
@@ -297,6 +298,109 @@ def test_vocab_terms_go_to_ai_prompt(env: Env) -> None:
     terms = env.calls.cleanup[-1][2]
     assert "Metabase" in terms and "Тимуру" in terms
     assert "дашборд" not in terms                  # слабые (строчные) — только в Whisper
+    c.close()
+
+
+# ---------- словарь — последнее слово ----------
+
+def _xenoposter_in_history(env: Env, c: Any) -> None:
+    """Ошибка распознавания попала в историю до словаря и стала «частым словом»,
+    потом пользователь занёс её в словарь как вариант термина."""
+    for _ in range(3):
+        _say(env, c, "Открой шаблон в Xenoposter")
+    assert "Xenoposter" in (env.rec.prompts[-1] or "")        # уже подсказывается Whisper
+    c.call("dict_upsert", {"term": "Zennoposter", "variants": ["Xenoposter"]})
+
+
+def test_dictionary_beats_ai_and_frequent_words(env: Env) -> None:
+    """ИИ вернул вариант-ошибку («Xenoposter») — вставляется термин; сама ошибка больше
+    не подсказывается ни Whisper, ни ИИ."""
+    c = env.client()
+    _xenoposter_in_history(env, c)
+    _enable_ai(c)
+    env.calls.cleanup_impl = lambda t: "Открой шаблон в Xenoposter и проверь прокси."
+    env.calls.delivered.clear()
+    hist = _say(env, c, "ну открой шаблон в Zenobowser и проверь прокси")
+    assert env.calls.delivered == [("Открой шаблон в Zennoposter и проверь прокси. ", False)]
+    assert hist["text"] == "Открой шаблон в Zennoposter и проверь прокси."
+    terms = env.calls.cleanup[-1][2]
+    assert "Zennoposter" in terms and "Xenoposter" not in terms
+    prompt = env.rec.prompts[-1] or ""
+    assert "Zennoposter" in prompt and "Xenoposter" not in prompt
+    # ошибка в частых словах осталась (история не переписывается) — её просто не подсказывают
+    assert any(v["word"] == "Xenoposter" for v in c.call("vocab_list"))
+    c.close()
+
+
+def test_dictionary_after_ai_in_raw_first_mode(env: Env) -> None:
+    c = env.client()
+    c.call("dict_upsert", {"term": "Zennoposter", "variants": ["Xenoposter"]})
+    _enable_ai(c, ai_mode="raw_first")
+    env.calls.cleanup_impl = lambda t: "Открой Xenoposter и проверь."
+    hist = _say(env, c, "ну открой зенопостер и проверь")
+    assert env.calls.replaced and env.calls.replaced[-1][1] == "Открой Zennoposter и проверь. "
+    assert hist["text"] == "Открой Zennoposter и проверь."
+    c.close()
+
+
+def test_window_context_is_corrected_by_dictionary(env: Env) -> None:
+    c = env.client()
+    c.call("dict_upsert", {"term": "Zennoposter", "variants": ["Xenoposter"]})
+    env.calls.context_reader = lambda: (TARGET.pid, "Шаблон для Xenoposter готов, пишу про")
+    env.rec.texts.append("прокси")
+    _start_and_wait_context(env)
+    c.mark()
+    env.eng._on_actions([Action(Kind.STOP)])
+    c.wait_event("history")
+    prompt = env.rec.prompts[-1] or ""
+    assert prompt.startswith("Шаблон для Zennoposter готов, пишу про")
+    assert "Xenoposter" not in prompt
+    c.close()
+
+
+def test_ai_test_applies_dictionary_like_dictation(env: Env) -> None:
+    c = env.client()
+    c.call("dict_upsert", {"term": "Zennoposter", "variants": ["Xenoposter"]})
+    _enable_ai(c)
+    env.calls.cleanup_impl = lambda t: t + " и Xenoposter."
+    r = c.call("ai_test", {"text": "проверь Xenoposter", "style": "normal"})
+    assert env.calls.cleanup[-1][0] == "проверь Zennoposter"
+    assert r["text"] == "проверь Zennoposter и Zennoposter."
+    c.close()
+
+
+# ---------- похожие написания (dict_fuzzy) ----------
+
+def test_one_term_is_enough_for_similar_spellings(env: Env) -> None:
+    """Термин без вариантов: похожие по звучанию написания заменяются им; выключено —
+    работают только точные варианты."""
+    c = env.client()
+    c.call("dict_upsert", {"term": "ZennoBrowser", "variants": []})
+    hist = _say(env, c, "открой Zenobowser и Xena браузер")
+    assert env.calls.delivered[-1] == ("открой ZennoBrowser и ZennoBrowser ", False)
+    assert hist["raw"] == "открой Zenobowser и Xena браузер"
+    c.call("set_settings", {"patch": {"dict_fuzzy": False}})
+    _say(env, c, "открой Zenobowser и Xena браузер")
+    assert env.calls.delivered[-1] == ("открой Zenobowser и Xena браузер ", False)
+    err = c.error("set_settings", {"patch": {"dict_fuzzy": "да"}})
+    assert "похожие написания" in err and "true/false" in err
+    c.close()
+
+
+def test_similar_spellings_after_ai_and_out_of_prompts(env: Env) -> None:
+    """Ошибка из истории без варианта в словаре: одного термина хватает, чтобы её не
+    подсказывать Whisper и ИИ и чтобы исправить её в ответе ИИ."""
+    c = env.client()
+    for _ in range(3):
+        _say(env, c, "Открой шаблон в Xenoposter")
+    c.call("dict_upsert", {"term": "Zennoposter", "variants": []})
+    _enable_ai(c)
+    env.calls.cleanup_impl = lambda t: "Открой шаблон в Xenoposter и проверь прокси."
+    hist = _say(env, c, "ну открой шаблон и проверь прокси")
+    assert hist["text"] == "Открой шаблон в Zennoposter и проверь прокси."
+    assert "Xenoposter" not in env.calls.cleanup[-1][2]
+    prompt = env.rec.prompts[-1] or ""
+    assert "Zennoposter" in prompt and "Xenoposter" not in prompt
     c.close()
 
 

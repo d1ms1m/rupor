@@ -1,7 +1,8 @@
 """Обработка текста диктовки: словарь, сниппеты, подсказка для распознавания, подсчёт слов.
 
 Модуль без состояния и без зависимостей от Windows — его зовёт движок после ASR:
-``apply_dictionary`` → ``expand_snippets`` (если сниппет сработал — ИИ не нужен).
+``apply_dictionary`` → ``expand_snippets`` (если сниппет сработал — ИИ не нужен), и ещё раз
+``apply_dictionary`` после ИИ-очистки: словарь пользователя — последнее слово.
 
 Сравнение везде без учёта регистра (Unicode, в т. ч. кириллица) и без различия «ё»/«е»:
 распознавание пишет то «всё», то «все», а пользователь в словаре — как привык.
@@ -10,7 +11,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 from typing import Any, NamedTuple
 
@@ -233,9 +234,50 @@ def apply_dictionary(text: str, items: list[dict[str, Any]]) -> str:
     key = _dict_key(items)
     if not key:
         return text
+    return _replace(text, _dictionary_alts(key))
+
+
+def misrecognition_filter(items: list[dict[str, Any]]) -> Callable[[str], bool] | None:
+    """Предикат «это слово — ошибка распознавания из словаря»: словарь заменил бы его
+    другим термином (вариант «Xenoposter» у термина «Zennoposter»). Сам термин в любом
+    регистре ошибкой не считается. Пустой словарь → None.
+
+    Такие слова не должны попадать ни в подсказку распознаванию, ни в термины ИИ: ошибка,
+    которая попала в историю до того, как её внесли в словарь, иначе закрепляет сама себя
+    через частые слова — распознавание и ИИ снова пишут её.
+
+    Зовётся перед каждой диктовкой на десятки частых слов, поэтому предикат на один и тот
+    же словарь общий, а ответ по слову запоминается: пока словарь не меняется, слово
+    проверяется один раз."""
+    key = _dict_key(items or [])
+    if not key:
+        return None
+    return _misrecognition_check(key)
+
+
+_MISRECOGNITION_MEMO = 20_000   # слов на один словарь — больше не запоминаем
+
+
+@lru_cache(maxsize=8)
+def _misrecognition_check(key: DictKey) -> Callable[[str], bool]:
+    alts = _dictionary_alts(key)
+    memo: dict[str, bool] = {}
+
+    def rewritten(word: str) -> bool:
+        hit = memo.get(word)
+        if hit is None:
+            hit = bool(word) and fold(_replace(word, alts)) != fold(_nfc(word))
+            if len(memo) < _MISRECOGNITION_MEMO:
+                memo[word] = hit
+        return hit
+    return rewritten
+
+
+def _replace(text: str, alts: tuple[_Alt, ...]) -> str:
+    """Замена по готовому набору вариантов словаря (см. apply_dictionary)."""
     text = _nfc(text)
     folded = fold(text)
-    active = tuple(a for a in _dictionary_alts(key) if _present(a.anchors, folded))
+    active = tuple(a for a in alts if _present(a.anchors, folded))
     if not active:
         return text
     pattern, meta = _compile_dictionary(active)

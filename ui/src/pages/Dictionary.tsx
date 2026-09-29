@@ -5,6 +5,7 @@ import {
   BookCheck,
   BookPlus,
   Check,
+  Ear,
   Pencil,
   Plus,
   Search,
@@ -18,8 +19,8 @@ import {
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ImportExport } from "../components/ImportExport";
 import { LearnModePicker, LearnText } from "../components/Learn";
-import { Button, ChipInput, IconButton, Input } from "../components/ui/controls";
-import { Card, EmptyState, LoadError, PageHeader, Skeleton } from "../components/ui/display";
+import { Button, ChipInput, IconButton, Input, Switch } from "../components/ui/controls";
+import { Card, EmptyState, LoadError, PageHeader, SettingRow, Skeleton } from "../components/ui/display";
 import { Tabs } from "../components/ui/tabs";
 import { VocabPanel } from "../components/Vocab";
 import { useToast } from "../components/ui/toast";
@@ -89,6 +90,8 @@ const NEW_TERM_EVENT = "rupor:dict-new-term";
 
 function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
   const toast = useToast();
+  const { settings } = useCore();
+  const fuzzy = settings?.dict_fuzzy ?? true;
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<number | "new" | null>(null);
   useEffect(() => {
@@ -155,6 +158,7 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
 
   return (
     <div>
+      <FuzzyCard />
       <LearnCard />
 
       {count > 0 && (
@@ -196,7 +200,7 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
                 className="overflow-hidden"
               >
                 <Card padded={false} className="mb-3 border-accent/40 shadow-glow">
-                  <DictEditor onSave={(term, v) => save(undefined, term, v)} onCancel={() => setEditing(null)} />
+                  <DictEditor fuzzy={fuzzy} onSave={(term, v) => save(undefined, term, v)} onCancel={() => setEditing(null)} />
                 </Card>
               </motion.div>
             )}
@@ -232,11 +236,12 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
                       {editing === d.id ? (
                         <DictEditor
                           initial={d}
+                          fuzzy={fuzzy}
                           onSave={(term, v) => save(d.id, term, v)}
                           onCancel={() => setEditing(null)}
                         />
                       ) : (
-                        <DictRow item={d} onEdit={() => setEditing(d.id)} onDelete={() => void remove(d)} />
+                        <DictRow item={d} fuzzy={fuzzy} onEdit={() => setEditing(d.id)} onDelete={() => void remove(d)} />
                       )}
                     </motion.div>
                   ))}
@@ -247,6 +252,31 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * «Узнавать похожие написания» (dict_fuzzy): ядро само находит слова, похожие на термин по
+ * звучанию, — варианты нужны только для совсем непохожих ошибок и очень коротких терминов.
+ */
+function FuzzyCard() {
+  const { settings, updateSettings } = useCore();
+  if (!settings) return null;
+  const on = settings.dict_fuzzy ?? true;
+  return (
+    <Card padded={false} className="mb-4 overflow-hidden" data-testid="dict-fuzzy">
+      <SettingRow
+        title={
+          <span className="flex items-center gap-2">
+            <Ear className="size-4 text-subtle" />
+            {t("dictionary.fuzzy.title")}
+          </span>
+        }
+        description={t("dictionary.fuzzy.hint")}
+      >
+        <Switch label={t("dictionary.fuzzy.title")} checked={on} onChange={(v) => void updateSettings({ dict_fuzzy: v })} />
+      </SettingRow>
+    </Card>
   );
 }
 
@@ -340,7 +370,26 @@ function PillPreview({ add }: { add: boolean }) {
   );
 }
 
-function DictRow({ item, onEdit, onDelete }: { item: DictItem; onEdit: () => void; onDelete: () => void }) {
+/** Похожие написания ядро ищет у терминов от 4 звуков без цифр (fuzzy.py); здесь —
+ * примерно: буквы, двойные — одна. */
+function soundsLongEnough(term: string): boolean {
+  if (/\d/.test(term)) return false;
+  const letters = [...term.toLowerCase()].filter((ch) => /\p{L}/u.test(ch));
+  return letters.filter((ch, i) => ch !== letters[i - 1]).length >= 4;
+}
+
+function DictRow({
+  item,
+  fuzzy,
+  onEdit,
+  onDelete,
+}: {
+  item: DictItem;
+  /** dict_fuzzy: термин без вариантов всё равно узнаётся по звучанию (если не слишком короткий). */
+  fuzzy: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div
       className="group flex items-center gap-5 px-5 py-3.5 transition-colors hover:bg-surface-2/50"
@@ -349,7 +398,9 @@ function DictRow({ item, onEdit, onDelete }: { item: DictItem; onEdit: () => voi
       <div className="w-52 shrink-0 truncate text-[14px] font-semibold text-fg selectable">{item.term}</div>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
         {item.variants.length === 0 ? (
-          <span className="text-[12.5px] text-subtle">{t("dictionary.noVariants")}</span>
+          <span className="text-[12.5px] text-subtle">
+            {t(fuzzy && soundsLongEnough(item.term) ? "dictionary.noVariantsFuzzy" : "dictionary.noVariants")}
+          </span>
         ) : (
           <>
             {item.variants.map((v) => (
@@ -381,10 +432,13 @@ function DictRow({ item, onEdit, onDelete }: { item: DictItem; onEdit: () => voi
 
 function DictEditor({
   initial,
+  fuzzy,
   onSave,
   onCancel,
 }: {
   initial?: DictItem;
+  /** dict_fuzzy: варианты необязательны — подсказка в поле вариантов об этом. */
+  fuzzy: boolean;
   onSave: (term: string, variants: string[]) => Promise<boolean>;
   onCancel: () => void;
 }) {
@@ -436,7 +490,11 @@ function DictEditor({
         </div>
         <div>
           <div className="mb-1.5 text-[12px] font-medium text-muted">{t("dictionary.variants")}</div>
-          <ChipInput values={variants} onChange={setVariants} placeholder={t("dictionary.variantsPlaceholder")} />
+          <ChipInput
+            values={variants}
+            onChange={setVariants}
+            placeholder={t(fuzzy ? "dictionary.variantsPlaceholderFuzzy" : "dictionary.variantsPlaceholder")}
+          />
         </div>
       </div>
       <div className="flex items-center justify-between">

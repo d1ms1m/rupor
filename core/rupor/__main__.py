@@ -58,8 +58,9 @@ def run_uia_selftest() -> int:
     """Самопроверка сборки. Сборка оконная (stdout нет) — результат в лог: UI Automation
     (тип элемента с фокусом, есть ли у него текст и его длина — без текста), частотные
     списки словаря частот, Core Audio (число аудиосессий — без имён, ничего не меняя),
-    каталоги сообщений locales/*.json (на месте и с одинаковыми ключами)."""
-    from . import duck, uia, vocab
+    каталоги сообщений locales/*.json (на месте и с одинаковыми ключами), проверка
+    орфографии Windows (похожие написания словаря)."""
+    from . import duck, spell, uia, vocab
     ok, summary = uia.selftest()
     # Частотные списки словаря частот (data/*.txt) должны попасть в сборку
     v_ok, v_summary = vocab.selftest()
@@ -67,8 +68,10 @@ def run_uia_selftest() -> int:
     a_ok, a_summary = duck.selftest()
     # Каталоги сообщений ru/en (locales/*.json) должны попасть в сборку
     l_ok, l_summary = i18n.selftest()
-    ok = ok and v_ok and a_ok and l_ok
-    summary = f"{summary}, {v_summary}, {a_summary}, {l_summary}"
+    # Проверка орфографии Windows (spellcheck.h через comtypes) — для похожих написаний
+    s_ok, s_summary = spell.selftest()
+    ok = ok and v_ok and a_ok and l_ok and s_ok
+    summary = f"{summary}, {v_summary}, {a_summary}, {l_summary}, {s_summary}"
     (log.info if ok else log.error)("Самопроверка UIA: %s", summary)
     return 0 if ok else 1
 

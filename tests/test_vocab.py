@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from rupor import vocab
+from rupor import textproc, vocab
 from rupor.textproc import fold
 from rupor.vocab import Word
 
@@ -126,6 +126,15 @@ def test_pick_words_limits_excludes_and_dedupes() -> None:
     p2, g2 = vocab.pick_words([], [Word("дашборд", 9, 0, False), Word("Redis", 2, 0, True)],
                               set(), strong_only=True)
     assert (p2, g2) == ([], ["Redis"])
+
+
+def test_pick_words_reject_skips_without_taking_limit() -> None:
+    """Ошибки распознавания из словаря пропускаются и места в лимите не занимают."""
+    gen = [Word("Xenoposter", 9, 0, True), Word("Redis", 5, 0, True),
+           Word("Kafka", 4, 0, True)]
+    bad = textproc.misrecognition_filter([{"term": "Zennoposter", "variants": ["Xenoposter"]}])
+    assert vocab.pick_words([], gen, set(), limit=2, reject=bad) == ([], ["Redis", "Kafka"])
+    assert vocab.pick_words([], gen, set(), limit=2) == ([], ["Xenoposter", "Redis"])
 
 
 # ---------- контекст окна ----------
