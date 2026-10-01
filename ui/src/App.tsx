@@ -91,6 +91,7 @@ function trayLabels(): TrayLabels {
     mode_clipboard: t("tray.modeClipboard"),
     style: t("tray.style"),
     last_insert: t("tray.lastInsert"),
+    pill_restore: t("tray.pillRestore"),
     rdp: t("tray.rdp"),
     rdp_empty: t("tray.rdpEmpty"),
     open: t("tray.open"),
@@ -167,6 +168,9 @@ function Bridge({ navigate }: { navigate: (to: string) => void }) {
           void updateSettings({ default_style: id.slice(6) });
         } else if (id === "last_insert") {
           call("last_insert").catch(fail);
+        } else if (id === "pill_restore") {
+          // Пилюлю на место ставит Rust; здесь — запомнить это место (позиция по умолчанию)
+          void updateSettings({ pill_position: null });
         } else if (id.startsWith("rdp:")) {
           // Флажок сессии в подменю «Рассылка в RDP ▸»: key — как пришёл в update_tray
           const key = id.slice(4);

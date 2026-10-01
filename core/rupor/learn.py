@@ -20,7 +20,8 @@
 кириллицы и простая фонетика, первая согласная та же). Правка, в которой уверенности меньше
 (``Correction.sure = False``: имя → похожее имя, только заглавная у русского слова или
 у слова в английском тексте, перевод в строчную латиницу, латинское окружение, короткий
-вариант), движком не добавляется сама, а предлагается — как в режиме suggest. Заглавная
+вариант), в режиме auto всё равно добавляется сразу — как и любая правка, с кнопкой
+«Отменить» (пользователь видит каждое пополнение словаря); sure только пишется в лог. Заглавная
 у обычного английского слова в английском тексте («monday» → «Monday», «english» →
 «English») — правописание, а не ошибка распознавания: не учится вовсе.
 
@@ -43,7 +44,7 @@ MIN_CHARS = 3            # короче (букв и цифр) — не учим
 SIM_CROSS = 0.6          # сходство кириллица ↔ латиница после транслитерации
 SIM_SAME = 0.75          # сходство в одной письменности (правка имени, латинского слова)
 MIN_LEN_RATIO = 0.6      # длины «скелетов» не должны отличаться сильнее
-SHORT_VARIANT = 4        # вариант из одного слова не длиннее — только предложить
+SHORT_VARIANT = 4        # вариант из одного слова не длиннее — правка без уверенности
 ALIVE_WORDS = 0.5        # доля слов фрагмента, которая должна уцелеть в «хорошем» снимке
 ALIVE_SIM = 0.5          # …или сходство уцелевшей части с фрагментом
 MAX_PER_EVAL = 3         # не больше стольких правок за одно наблюдение
@@ -89,7 +90,7 @@ COMMON_WORDS = frozenset(fold(w) for w in """
     рождество рождеством победа победы мир пасха праздник
 """.split())
 # Частые имена, города, страны: их кросс-письменная правка («Сергей» → Sergey,
-# «Москва» → Moscow) — перевод; заглавная у них — законная правка (предлагается).
+# «Москва» → Moscow) — перевод; заглавная у них — законная правка (без уверенности).
 COMMON_NAMES = frozenset(fold(w) for w in """
     москва россия питер петербург минск беларусь киев украина лондон париж берлин
     америка европа германия франция китай япония казахстан
@@ -147,8 +148,8 @@ _VOWELS = frozenset("aeiou")
 class Correction:
     """Правка-кандидат: ``term`` — как исправил пользователь, ``variant`` — как было
     распознано ("" — вариант не нужен: правка только регистра или «ё»).
-    ``sure=False`` — уверенности мало: только предложить (кнопка «Добавить»), добавить
-    самому — лишь когда та же правка повторится."""
+    ``sure=False`` — уверенности мало. Движок добавляет и такую правку (режим auto, с кнопкой
+    «Отменить»), sure — только для лога."""
     term: str
     variant: str
     sure: bool = True
@@ -523,14 +524,14 @@ def _case_fix(variant: str, term: str, new_words: list[str], start: bool, englis
     if english and plain_latin:
         # Английский текст, у слова только заглавная первая буква: «monday» → «Monday»,
         # «english» → «English» — правописание, а не ошибка распознавания. Обычные слова —
-        # никогда; остальное («london» → «London», имя) — только предложить, как русские имена.
+        # никогда; остальное («london» → «London», имя) — без уверенности, как русские имена.
         if all(_everyday_en(w) for w in new_words):
             return None
         return Correction(term, "", sure=False), False
     if _LATIN.search(term) or digits or _caps_or_camel(new_words):
         return Correction(term, ""), False            # clickhouse → ClickHouse, сдэк → СДЭК
     # Русское слово, только заглавная: имя — или оформление («Заказчик», «с Новым годом»).
-    # Обычные слова и прилагательные — никогда; остальное — только предложить.
+    # Обычные слова и прилагательные — никогда; остальное — без уверенности.
     if any(_is_common(w, names=False) or _adjective(w) for w in new_words):
         return None
     return Correction(term, "", sure=False), False
@@ -575,7 +576,7 @@ def _judge(old: Sequence[Token], new: Sequence[Token], before: str, after: str
         return None
     if cross:
         # «вебхук» → webhook (строчная латиница) — может быть и переводом; латинское
-        # окружение — правка в английском тексте. Такое только предлагаем.
+        # окружение — правка в английском тексте. Такое — без уверенности.
         sure = any(ch.isupper() or ch.isdigit() for ch in term) and \
             not _latin_context(after, new[0].start, new[-1].end)
     else:
@@ -586,7 +587,7 @@ def _judge(old: Sequence[Token], new: Sequence[Token], before: str, after: str
         return Correction(term, "", sure), False      # «click house» → ClickHouse: хватит термина
     stemmed = _stem_variant(variant, term)
     if len(old) == 1 and sum(ch.isalpha() for ch in stemmed) <= SHORT_VARIANT:
-        return Correction(term, stemmed, sure=False), True   # «слак» → Slack: только предложить
+        return Correction(term, stemmed, sure=False), True   # «слак» → Slack: без уверенности
     return Correction(term, stemmed, sure), False
 
 

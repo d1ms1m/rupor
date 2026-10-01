@@ -69,7 +69,8 @@ The screenshots were taken in the interface's demo mode; all data in them is mad
   on their own («Xena браузер», "Zenobowser" → ZennoBrowser). Dictionary terms are passed to
   recognition as hints.
 - **The dictionary learns from your corrections.** Fix a word right after it's inserted and
-  Rupor suggests (or adds right away) the replacement, so next time the word comes out right.
+  Rupor adds the replacement right away (with an Undo button) or asks first, so next time the
+  word comes out right. Everything it has learned is listed under Dictionary → *Recently added*.
 - **Frequent words and context.** Names and terms from your dictations, as well as the text
   before the cursor, are passed to recognition as hints. All of this is computed and stored on
   your computer (terms are sent to AI cleanup only if it's on).
@@ -282,7 +283,8 @@ launch (changes are written to `%APPDATA%\Rupor\duck.json` in advance).
   minute (via Windows UI Automation: Notepad, Telegram Desktop, fields in Chromium-based browsers,
   Word). If you fix a word that was misrecognized ("meta base" → Metabase), the indicator shows a
   notification. Modes (`learn_mode`): **Add automatically** — with an Undo button (default),
-  **Ask first** — with an Add button, **Off**.
+  **Ask first** — with an Add button, **Off**. Dictionary → *Recently added* lists what was
+  learned, when, and whether Rupor added it or you confirmed it, each with an Undo button.
 - **Frequent words**: Rupor picks words typical for you from the history — Latin-script terms,
   abbreviations, names, rare words — and passes them to recognition as hints. Any word can be
   excluded. With history off, frequencies aren't collected.
@@ -312,11 +314,12 @@ different Russian case form, «Наташа» → «Наташе»), swapping a 
 formatting and capital letters on ordinary words, punctuation, deleting and adding words,
 numbers, words shorter than 3 letters, and common words.
 
-In doubtful cases Rupor asks even in Add automatically mode, and adds the word by itself on the
-second identical correction: a short word (up to 4 letters), one name replaced with a similar
-one, only a capital letter added to a Russian word, a switch to lowercase Latin
-(«вебхук» → webhook), a correction inside English text, a word that stayed in the field for less
-than a second. A half-typed word (Enter right after the last letter) is never learned.
+In Add automatically mode doubtful corrections are added right away too, so you see every word
+that goes into the dictionary and can undo it: a short word (up to 4 letters), one name replaced
+with a similar one, only a capital letter added to a Russian word, a switch to lowercase Latin
+(«вебхук» → webhook), a correction inside English text. In Ask first mode Rupor asks about every
+correction and adds it by itself on the second identical one. A half-typed word (Enter right
+after the last letter) is never learned. An undone correction isn't learned again.
 
 Watching the field ends when focus leaves it, when the field is cleared (the message was sent),
 after a minute, or when a new dictation starts. RDP windows, broadcasts and command mode aren't

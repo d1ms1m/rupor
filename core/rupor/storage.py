@@ -51,6 +51,7 @@ MAX_PAGE = 1000
 BUSY_TIMEOUT_S = 10.0    # ждать чужую блокировку записи (второй экземпляр, внешний просмотрщик)
 LEARN_JOURNAL_KEY = "learn_journal"   # kv: журнал выученных правок (для «Отменить»)
 LEARN_JOURNAL_MAX = 300
+LEARN_SOURCES = ("auto", "accepted")  # кто добавил правку: Рупор сам / пользователь «Добавить»
 MONTH_DAYS = 30          # расход ИИ «за месяц» = последние 30 дней, включая сегодня
 AI_KINDS = ("cleanup", "command", "test")
 VOCAB_VERSION_KEY = "vocab_version"   # kv: версия отбора слов, по которой собран vocab
@@ -688,10 +689,13 @@ class Storage:
     # ---------- словарь: обучение на правках (engine → learn) ----------
     #
     # Журнал обучения (kv ``learn_journal``): что именно изменила каждая выученная правка —
-    # {id, term, variant, created, owns}. «Отменить» откатывает только по записи журнала
-    # и стирает её: повторное нажатие, id, заново выданный SQLite ручному термину, и правки,
-    # сделанные после, не страдают. owns — запись словаря создана обучением и ещё «принадлежит»
-    # этой правке (при отмене переходит к следующей правке того же термина).
+    # {id, term, variant, created, owns, ts, source}. «Отменить» откатывает только по записи
+    # журнала и стирает её: повторное нажатие, id, заново выданный SQLite ручному термину,
+    # и правки, сделанные после, не страдают. owns — запись словаря создана обучением и ещё
+    # «принадлежит» этой правке (при отмене переходит к следующей правке того же термина).
+    # ts — когда (unix, с), source — кто добавил: "auto" — Рупор сам, "accepted" — пользователь
+    # нажал «Добавить» (у записей из версий без этих полей — None). Журнал же показывается
+    # на странице «Словарь» («Недавно добавлено», dict_learn_journal).
 
     @staticmethod
     def _journal_load(c: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -704,8 +708,14 @@ class Storage:
         for e in data if isinstance(data, list) else []:
             if (isinstance(e, dict) and isinstance(e.get("id"), int)
                     and isinstance(e.get("term"), str) and isinstance(e.get("variant"), str)):
+                ts = e.get("ts")
+                source = e.get("source")
                 out.append({"id": e["id"], "term": e["term"], "variant": e["variant"],
-                            "created": e.get("created") is True, "owns": e.get("owns") is True})
+                            "created": e.get("created") is True, "owns": e.get("owns") is True,
+                            "ts": float(ts) if (isinstance(ts, (int, float))
+                                                and not isinstance(ts, bool)
+                                                and math.isfinite(ts)) else None,
+                            "source": source if source in LEARN_SOURCES else None})
         return out
 
     @staticmethod
@@ -722,14 +732,17 @@ class Storage:
         if len(rest) != len(entries):
             self._journal_save(c, rest)
 
-    def dict_learn_add(self, term: str, variant: str = "", journal: bool = True
-                       ) -> tuple[DictItem, bool]:
+    def dict_learn_add(self, term: str, variant: str = "", journal: bool = True,
+                       source: str = "auto") -> tuple[DictItem, bool]:
         """Выученная правка «вариант → термин». Термин уже есть (без учёта регистра и «ё») —
         вариант добавляется к нему без дублей, написание термина не меняется; нет — создаётся
         новая запись. Возвращает (запись, создана ли она). Вариант, который уже ведёт
         к другому термину, — ``ValueError``: одна замена не может давать два результата.
-        journal — записать изменение в журнал обучения (для «Отменить»); если словарь не
-        изменился (такой вариант уже был), записывать нечего."""
+        journal — записать изменение в журнал обучения (для «Отменить» и «Недавно
+        добавлено») с временем и source ("auto" — добавил Рупор, "accepted" — пользователь
+        нажал «Добавить»); если словарь не изменился (такой вариант уже был), записывать
+        нечего."""
+        stamp = {"ts": time.time(), "source": source}
         term = _clean_term(_str(term))
         variant = _clean_term(_str(variant))
         if not term:
@@ -754,7 +767,7 @@ class Storage:
                 if journal:
                     self._journal_save(c, [*self._journal_load(c), {
                         "id": item["id"], "term": term, "variant": variant, "created": True,
-                        "owns": True}])
+                        "owns": True, **stamp}])
                 return item, True
             variants = _load_variants(same["variants"])
             if variant and fv not in {textproc.fold(v) for v in variants}:
@@ -764,8 +777,31 @@ class Storage:
                 if journal:
                     self._journal_save(c, [*self._journal_load(c), {
                         "id": int(same["id"]), "term": same["term"], "variant": variant,
-                        "created": False, "owns": False}])
+                        "created": False, "owns": False, **stamp}])
             return {"id": int(same["id"]), "term": same["term"], "variants": variants}, False
+
+    def dict_learn_journal(self, limit: int = 50) -> list[dict[str, Any]]:
+        """«Недавно добавлено» на странице «Словарь»: последние записи журнала обучения,
+        новые первыми — {id, term, variant, created, ts, source} (как аргументы
+        dict_learn_undo: «Отменить» в строке = та же отмена, запись журнала стирается).
+        Записи, чья запись словаря удалена или переименована (отмена там ничего не сделает),
+        не показываются. limit — не больше LEARN_JOURNAL_MAX."""
+        limit = max(0, min(int(limit), LEARN_JOURNAL_MAX))
+        out: list[dict[str, Any]] = []
+        if not limit:
+            return out
+        with self._lock:
+            entries = self._journal_load(self._conn)
+            rows = {int(r["id"]): textproc.fold(r["term"]) for r in
+                    self._conn.execute("SELECT id, term FROM dictionary").fetchall()}
+        for e in reversed(entries):
+            if rows.get(e["id"]) != textproc.fold(e["term"]):
+                continue
+            out.append({"id": e["id"], "term": e["term"], "variant": e["variant"],
+                        "created": e["created"], "ts": e["ts"], "source": e["source"]})
+            if len(out) >= limit:
+                break
+        return out
 
     def dict_learn_undo(self, term: str, variant: str = "", id: int | None = None,
                         created: bool = False) -> bool:

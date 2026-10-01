@@ -20,7 +20,8 @@
   4. вставка, событие result, история (если включена) и статистика (всегда);
   5. обучение словаря: до минуты следим за полем, куда вставили текст (UI Automation),
      и правки, похожие на ошибку распознавания («метабейс» → Metabase), добавляем
-     в словарь или предлагаем добавить (learn_mode, см. _LearnWatch и learn.py).
+     в словарь с кнопкой «Отменить» или предлагаем добавить (learn_mode, см. _LearnWatch
+     и learn.py); что добавлено — в журнале обучения (Storage.dict_learn_journal).
 Текст никогда не теряется: при любой ошибке вставляется то, что есть, и всё пишется в историю.
 
 Звук компьютера (duck_mode, duck.py): приглушается, когда запись подтверждена (после звука
@@ -84,7 +85,6 @@ LEARN_POLL_FAST_S = 0.1     # …а пока поле меняется (печа
 LEARN_FAST_FOR_S = 2.0      # «меняется» — столько секунд после последнего изменения
 LEARN_MIN_HELD_S = 0.3      # правка держалась в поле меньше — не учим (слово ещё печатали:
                             # Enter, Alt+Tab или хоткей сразу после буквы)
-LEARN_STABLE_S = 1.0        # …держалась меньше этого — только предложить, не добавлять само
 LEARN_SNAPSHOTS = 64        # сколько последних снимков поля помнить (≥ 6 с при частом опросе)
 LEARN_BASELINE_S = 2.0      # ждать, пока вставленный текст появится в поле
 LEARN_BASELINE_POLL_S = 0.15
@@ -1424,55 +1424,61 @@ class Engine:
                         snaps: list[learn.Snapshot], reason: str, polls: int,
                         changes: int) -> None:
         """Наблюдение закончено: найти правки последнего хорошего снимка и добавить или
-        предложить их. Правка, которая держалась в поле меньше LEARN_MIN_HELD_S (слово ещё
-        печатали), не учится; меньше LEARN_STABLE_S — только предлагается. В лог — только
-        счётчики, текст поля и слова из него — никогда."""
+        предложить их (_learn_apply). Правка, которая держалась в поле меньше
+        LEARN_MIN_HELD_S (слово ещё печатали), не учится. В лог — только счётчики, текст поля
+        и слова из него — никогда."""
         pressed = self.machine.presses != w.presses
         log.info("Обучение словаря: наблюдение закончено (%s), опросов %d, изменений поля %d, "
                  "нажатия %s", reason, polls, changes, "были" if pressed else "не было")
         if not pressed or self.s.learn_mode == "off" or self._paused:
             return
         found = learn.held_corrections(before, span, snaps, self._dict_items(),
-                                       horizon=LEARN_STABLE_S)
+                                       horizon=LEARN_MIN_HELD_S)
         if not found:
             return
         kept = [(c, held) for c, held in found if held >= LEARN_MIN_HELD_S]
         log.info("Обучение словаря: правок найдено %d, устоялось %d", len(found), len(kept))
-        for c, held in kept:
+        for c, _ in kept:
             try:
-                self._learn_apply(c, sure=c.sure and held >= LEARN_STABLE_S)
+                self._learn_apply(c)
             except Exception:
                 log.exception("Обучение словаря: не удалось учесть правку")
 
-    def _learn_apply(self, c: learn.Correction, sure: bool = True) -> None:
-        """Режим auto и уверенная правка — добавить и показать «Отменить». Режим suggest
-        или правка без уверенности (learn: имя → похожее имя, заглавная у русского слова,
-        короткий вариант; слово держалось в поле меньше LEARN_STABLE_S) — предложить
-        «Добавить»; та же правка LEARN_REPEAT-й раз — добавить самому."""
+    def _learn_apply(self, c: learn.Correction) -> None:
+        """Режим auto — добавить сразу любую правку, прошедшую фильтры (и неуверенную:
+        имя → похожее имя, заглавная у русского слова, короткий вариант), и показать
+        «Отменить»: пользователь видит каждое пополнение словаря, а не вопросы, которые
+        пропадают. Режим suggest — предложить «Добавить»; та же правка LEARN_REPEAT-й раз —
+        добавить самому. Добавленное пишется в журнал обучения (source "auto")."""
         key = learn.pair_key(c.term, c.variant)
         if key in self._kv_list(LEARN_REJECTED_KEY):
             log.info("Обучение словаря: эту правку пользователь уже отменял")
             return
         data: dict[str, Any] = {"term": c.term, "variant": c.variant, "id": None,
                                 "created": False}
-        ask = self.s.learn_mode == "suggest" or not sure
-        if ask and self._learn_count(key) < LEARN_REPEAT:
+        if self.s.learn_mode == "suggest" and self._learn_count(key) < LEARN_REPEAT:
             self.notice(learn.suggest_text(c.term, c.variant), action="dict_add", toast=True,
                         data=data)
             return
         try:
-            item, created = self.storage.dict_learn_add(c.term, c.variant, journal=True)
+            item, created = self.storage.dict_learn_add(c.term, c.variant, journal=True,
+                                                        source="auto")
         except ValueError as e:
             log.info("Обучение словаря: правка не добавлена (%s)", type(e).__name__)
             return
         self._learn_forget(key, rejected=False)
+        log.info("Обучение словаря: правка добавлена сама (%s, %s)",
+                 "новый термин" if created else "к существующему термину",
+                 "уверенная" if c.sure else "без уверенности")
         data.update(id=item["id"], created=created)
         self.notice(learn.added_text(c.term, c.variant), action="dict_undo", toast=True,
                     data=data)
 
     def learn_accept(self, term: str, variant: str) -> dict[str, Any]:
-        """Кнопка «Добавить» (режим suggest): добавить термин/вариант, слив с существующим."""
-        item, created = self.storage.dict_learn_add(term, variant, journal=True)
+        """Кнопка «Добавить» (режим suggest): добавить термин/вариант, слив с существующим
+        (в журнал обучения — source "accepted")."""
+        item, created = self.storage.dict_learn_add(term, variant, journal=True,
+                                                    source="accepted")
         self._learn_forget(learn.pair_key(term, variant), rejected=True)
         log.info("Обучение словаря: пользователь добавил правку (%s)",
                  "новый термин" if created else "к существующему термину")

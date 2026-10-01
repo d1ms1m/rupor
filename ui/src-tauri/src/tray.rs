@@ -172,6 +172,7 @@ tray_texts! {
     rdp,
     rdp_empty,
     last_insert,
+    pill_restore,
     open,
     quit,
 }
@@ -325,6 +326,7 @@ enum Label {
     Rdp,
     RdpEmpty,
     LastInsert,
+    PillRestore,
     Open,
     Quit,
 }
@@ -334,7 +336,7 @@ const MODES: [(&str, Label); 3] =
     [("auto", Label::ModeAuto), ("type", Label::ModeType), ("clipboard", Label::ModeClipboard)];
 
 impl Label {
-    const ALL: [Label; 11] = [
+    const ALL: [Label; 12] = [
         Label::Pause,
         Label::InsertMode,
         Label::ModeAuto,
@@ -344,6 +346,7 @@ impl Label {
         Label::Rdp,
         Label::RdpEmpty,
         Label::LastInsert,
+        Label::PillRestore,
         Label::Open,
         Label::Quit,
     ];
@@ -359,6 +362,7 @@ impl Label {
             Label::Rdp => &t.rdp,
             Label::RdpEmpty => &t.rdp_empty,
             Label::LastInsert => &t.last_insert,
+            Label::PillRestore => &t.pill_restore,
             Label::Open => &t.open,
             Label::Quit => &t.quit,
         }
@@ -556,6 +560,7 @@ pub struct TrayMenu {
     rdp_menu: Submenu<Wry>,
     rdp_none: MenuItem<Wry>,
     last: MenuItem<Wry>,
+    pill_restore: MenuItem<Wry>,
     open: MenuItem<Wry>,
     quit: MenuItem<Wry>,
     view: Mutex<View>,
@@ -582,6 +587,7 @@ impl TrayMenu {
             Label::Rdp => self.rdp_menu.set_text(text),
             Label::RdpEmpty => self.rdp_none.set_text(text),
             Label::LastInsert => self.last.set_text(text),
+            Label::PillRestore => self.pill_restore.set_text(text),
             Label::Open => self.open.set_text(text),
             Label::Quit => self.quit.set_text(text),
         }
@@ -651,6 +657,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let last = item("last_insert", Label::LastInsert)?;
+    let pill_restore = item("pill_restore", Label::PillRestore)?;
     let open = item("open", Label::Open)?;
     let quit = item("quit", Label::Quit)?;
     let menu = Menu::with_items(
@@ -662,6 +669,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             &mode_menu,
             &style_menu,
             &last,
+            &pill_restore,
             &PredefinedMenuItem::separator(app)?,
             &open,
             &quit,
@@ -697,6 +705,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         rdp_menu,
         rdp_none,
         last,
+        pill_restore,
         open,
         quit,
         view: Mutex::new(View {
@@ -721,6 +730,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 fn on_menu(app: &AppHandle, id: &str) {
     match id {
         "open" => crate::show_main(app, None),
+        "pill_restore" => crate::pill::restore(app),
         "quit" => crate::quit(app),
         "status" | AI_LINE_ID | RDP_NONE_ID => {}
         _ => {
@@ -1152,6 +1162,7 @@ mod tests {
                 "rdp",
                 "rdp_empty",
                 "last_insert",
+                "pill_restore",
                 "open",
                 "quit",
             ]

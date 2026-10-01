@@ -1,9 +1,11 @@
 """Storage: обучение словаря — dict_learn_add и одноразовая отмена dict_learn_undo по журналу
 (kv «learn_journal»). Регрессии: «Отменить» не должно удалять то, что добавлено позже
-(другой выученный вариант, ручные правки), и не должно срабатывать второй раз."""
+(другой выученный вариант, ручные правки), и не должно срабатывать второй раз.
+Журнал же — «Недавно добавлено» (dict_learn_journal): время, кто добавил, новые первыми."""
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Iterator
 
@@ -123,3 +125,58 @@ def test_journal_is_bounded_and_survives_garbage(st: Storage) -> None:
     for i in range(320):
         st.dict_learn_add(f"Term{i}", f"вариант{i}")
     assert len(json.loads(st.kv_get("learn_journal"))) == 300
+
+
+# ---------- журнал для «Недавно добавлено»: время, кто добавил, порядок ----------
+
+def test_journal_entries_have_time_and_source(st: Storage) -> None:
+    t0 = time.time()
+    st.dict_learn_add("Metabase", "метабейс")                      # по умолчанию — Рупор сам
+    st.dict_learn_add("Metabase", "мета бейз", source="accepted")
+    st.dict_learn_add("Grafana", "", source="accepted")
+    raw = json.loads(st.kv_get("learn_journal"))
+    assert [(e["source"], type(e["ts"])) for e in raw] == [
+        ("auto", float), ("accepted", float), ("accepted", float)]
+    got = st.dict_learn_journal()
+    assert [(j["term"], j["variant"], j["created"], j["source"]) for j in got] == [
+        ("Grafana", "", True, "accepted"),                         # новые — первыми
+        ("Metabase", "мета бейз", False, "accepted"),
+        ("Metabase", "метабейс", True, "auto")]
+    assert all(t0 <= j["ts"] <= time.time() for j in got)
+    assert set(got[0]) == {"id", "term", "variant", "created", "ts", "source"}
+    assert st.dict_learn_journal(2) == got[:2]
+    assert st.dict_learn_journal(0) == []
+    # отмена одной правки не стирает время и источник остальных
+    st.dict_learn_undo("Metabase", "мета бейз", got[1]["id"], False)
+    assert st.dict_learn_journal() == [got[0], got[2]]
+
+
+def test_old_journal_entries_without_time_and_source(st: Storage) -> None:
+    """Журнал прошлой версии (без ts и source) читается: ts и source — None; по нему
+    работает «Отменить»; битые ts/source — тоже None."""
+    m = st.dict_upsert(None, "Metabase", ["метабейс"])
+    g = st.dict_upsert(None, "Grafana", ["графана"])
+    st.kv_set("learn_journal", json.dumps([
+        {"id": m["id"], "term": "Metabase", "variant": "метабейс", "created": True,
+         "owns": True},
+        {"id": g["id"], "term": "Grafana", "variant": "графана", "created": True, "owns": True,
+         "ts": "вчера", "source": "robot"}], ensure_ascii=False))
+    st.dict_learn_add("Jira", "джира", source="accepted")
+    got = st.dict_learn_journal()
+    assert [(j["term"], j["ts"] is None, j["source"]) for j in got] == [
+        ("Jira", False, "accepted"), ("Grafana", True, None), ("Metabase", True, None)]
+    assert st.dict_learn_undo("Grafana", "графана", g["id"], True) is True
+    assert [(j["term"], j["ts"] is None, j["source"]) for j in st.dict_learn_journal()] == [
+        ("Jira", False, "accepted"), ("Metabase", True, None)]
+    assert terms(st) == [("Jira", ["джира"]), ("Metabase", ["метабейс"])]
+
+
+def test_journal_hides_renamed_and_deleted_terms(st: Storage) -> None:
+    a, _ = st.dict_learn_add("Metabase", "метабейс")
+    b, _ = st.dict_learn_add("Grafana", "графана")
+    st.dict_upsert(b["id"], "Kibana", ["графана"])                # переименовали вручную
+    assert [j["term"] for j in st.dict_learn_journal()] == ["Metabase"]
+    st.dict_upsert(a["id"], "METABASE", ["метабейс"])             # только регистр — та же
+    assert [j["term"] for j in st.dict_learn_journal()] == ["Metabase"]
+    st.dict_delete(a["id"])
+    assert st.dict_learn_journal() == []

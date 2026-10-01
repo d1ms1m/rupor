@@ -39,7 +39,7 @@ import {
   type LearnNotice,
 } from "../lib/learn";
 import { RDP_SESSIONS_ROUTE } from "../lib/rdp";
-import { relaunchAdmin, setWindowTitle, showMain } from "../lib/tauri";
+import { pillRaise, relaunchAdmin, setWindowTitle, showMain } from "../lib/tauri";
 import { normalizeAccent, accentForeground } from "../lib/theme";
 import type { CoreState, NoticeEvent, RecordingEvent, Settings } from "../lib/types";
 import { backend, call } from "../lib/ws";
@@ -322,6 +322,12 @@ export function Pill() {
     mode = modelReady === false || (modelReady === null && !core.first_run_done) ? "setup" : "error";
   else mode = "idle";
 
+  // Началась запись — пилюлю наверх: её могло закрыть окно, которое тоже «поверх всех»
+  // (полноэкранный RDP). При смене активного окна это делает и сама оболочка.
+  useEffect(() => {
+    if (mode === "rec") void pillRaise();
+  }, [mode]);
+
   // Таймер уведомления идёт, пока его видно; спрятанное (за «Вставлено») ждёт не дольше 10 с.
   const noticeVisible = mode === "notice";
   useEffect(() => {
@@ -335,14 +341,18 @@ export function Pill() {
     [],
   );
 
-  // Уведомление «словарь учится» висит ~6 с (пока курсор над пилюлей — дольше). Спрятанное
-  // за записью ждёт до 2 мин: после «Вставлено» всё равно покажем, что попало в словарь.
+  // Уведомление «словарь учится» висит: «В словарь добавлено … [Отменить]» — 12 с, чтобы
+  // успеть прочитать и отменить, вопрос «Добавить …?» — ~6 с (пока курсор над пилюлей —
+  // дольше). Спрятанное за записью ждёт до 2 мин: после «Вставлено» всё равно покажем,
+  // что попало в словарь.
   const learnVisible = mode === "learn";
   const learnKeyNow = learnHead?.key;
   const learnPhase = learnHead?.phase;
+  const learnUndo = learnHead?.n.action === "dict_undo";
   useEffect(() => {
     if (!learnKeyNow || !learnPhase || learnPhase === "busy") return;
-    const ms = learnPhase === "ok" ? 1300 : learnPhase === "fail" ? 4500 : learnVisible ? 6000 : 120_000;
+    const shown = learnUndo ? 12_000 : 6000;
+    const ms = learnPhase === "ok" ? 1300 : learnPhase === "fail" ? 4500 : learnVisible ? shown : 120_000;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const arm = (d: number) => {
       timer = setTimeout(() => {
@@ -354,7 +364,7 @@ export function Pill() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [learnKeyNow, learnPhase, learnVisible]);
+  }, [learnKeyNow, learnPhase, learnVisible, learnUndo]);
 
   // Пилюля выключена, но пришло warn/error (например, «Перезапустить от администратора»):
   // главное окно обычно скрыто в трее, поэтому на время уведомления пилюлю всё же показываем

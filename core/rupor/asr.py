@@ -47,6 +47,78 @@ _LATIN_TOKEN_RE = re.compile(
     r"(?<![^\W\d_])[A-Za-z][A-Za-z0-9+#]*(?:[._'’-][A-Za-z0-9+#]+)*")
 
 
+# ---------- мусор распознавания ----------
+#
+# Неуверенный сегмент faster-whisper перераспознаёт со всё большей «температурой» (до 1.0) —
+# это уже угадывание: иероглифы, «jpuy, jpac», «зап測,測,測». А в тишине и музыке Whisper,
+# обученный на субтитрах, «слышит» их служебные фразы («ДИНАМИЧНАЯ МУЗЫКА»). Такое не
+# вставляем: распознаём ещё раз без подсказки (её мог отравить прежний мусор из истории)
+# и без угадывания; снова мусор — пустой текст («Речь не распознана»).
+
+# Письменности, которых в русской и английской диктовке не бывает: иврит, арабица,
+# индийские, тайская, хангыль, кана, иероглифы
+_FOREIGN_RANGES = ((0x0590, 0x08FF), (0x0900, 0x0DFF), (0x0E00, 0x0EFF), (0x1100, 0x11FF),
+                   (0x3040, 0x30FF), (0x3100, 0x318F), (0x3400, 0x4DBF), (0x4E00, 0x9FFF),
+                   (0xAC00, 0xD7AF), (0xF900, 0xFAFF))
+# Целиком — служебная фраза субтитров (сравнение без регистра, «ё» и знаков препинания)
+_HALLUCINATIONS = frozenset((
+    "динамичная музыка", "спокойная музыка", "веселая музыка", "грустная музыка",
+    "напряженная музыка", "тревожная музыка", "торжественная музыка", "музыка",
+    "аплодисменты", "субтитры сделал dimatorzok", "субтитры создавал dimatorzok",
+    "субтитры делал dimatorzok", "продолжение следует", "спасибо за просмотр",
+    "редактор субтитров а синецкая корректор а егорова", "thank you for watching",
+    "thanks for watching", "subtitles by the amara org community",
+))
+GUESS_TEMPERATURE = 0.6    # сегмент с такой температурой и выше — угадывание
+LOW_LOGPROB = -1.5         # средняя уверенность сегмента ниже — повторить без подсказки
+REPEAT_RATIO = 2.4         # сжимаемость текста выше (как у Whisper) — зацикленный повтор
+REPEAT_MIN_CHARS = 40
+
+
+def _foreign(text: str) -> bool:
+    return any(lo <= ord(ch) <= hi for ch in text for lo, hi in _FOREIGN_RANGES)
+
+
+def _norm_phrase(text: str) -> str:
+    words = re.findall(r"[^\W_]+", text.casefold().replace("ё", "е"))
+    return " ".join(words)
+
+
+def _repetitive(text: str) -> bool:
+    import zlib
+    data = text.encode("utf-8")
+    if len(text) < REPEAT_MIN_CHARS:
+        return False
+    return len(data) / max(1, len(zlib.compress(data))) > REPEAT_RATIO
+
+
+def garbage_reason(text: str) -> str | None:
+    """Почему текст — заведомый мусор (не вставлять), None — текст как текст."""
+    if not text:
+        return None
+    if _foreign(text):
+        return "чужие символы"
+    if _norm_phrase(text) in _HALLUCINATIONS:
+        return "фраза субтитров"
+    if _repetitive(text):
+        return "зацикленный повтор"
+    return None
+
+
+def _mean(stats: list[tuple[float | None, float]]) -> float:
+    return sum(lp for _t, lp in stats) / len(stats) if stats else 0.0
+
+
+def guessing(stats: list[tuple[float | None, float]]) -> bool:
+    """Какой-то сегмент распознан с повышенной температурой — это уже угадывание."""
+    return any(t is not None and t >= GUESS_TEMPERATURE for t, _lp in stats)
+
+
+def low_confidence(stats: list[tuple[float | None, float]]) -> bool:
+    """Какой-то сегмент с низкой средней уверенностью — стоит переспросить без подсказки."""
+    return any(lp < LOW_LOGPROB for _t, lp in stats)
+
+
 def dictation_mode(s: object) -> str:
     """Настройка ``dictation_language``: auto | ru | en (неизвестное — auto)."""
     v = getattr(s, "dictation_language", "auto")
@@ -282,21 +354,56 @@ class Recognizer:
                 raise ModelMissing(i18n.tr("asr.model_unloaded_retry"))
             lang = language or self._pick_language(audio)
             prompt = adapt_prompt(prompt, lang)
-            segs, _info = self._model.transcribe(
-                audio,
-                language=lang,
-                beam_size=self.s.beam_size,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 500},
-                condition_on_previous_text=False,
-                without_timestamps=True,
-                initial_prompt=prompt,
-            )
-            text = " ".join(s.text.strip() for s in segs).strip()
+            text, stats = self._decode(audio, lang, prompt, guess=True)
+            text = self._second_opinion(audio, lang, text, stats)
         ms = (time.perf_counter() - t0) * 1000
         r = Result(text, lang, len(audio) / SAMPLE_RATE, ms)
         log.info("ASR %.1f с аудио → %.0f мс, язык %s, %d симв.", r.audio_s, ms, lang, len(text))
         return r
+
+    def _second_opinion(self, audio: np.ndarray, lang: str, text: str,
+                        stats: list[tuple[float | None, float]]) -> str:
+        """Первый проход — мусор или угадывание: распознать ещё раз без подсказки и без
+        угадывания; повтор чистый — он, повтор тоже мусор — пустой текст. Первый проход
+        просто неуверенный — из двух берётся более уверенный, мусорный повтор не берётся."""
+        bad = garbage_reason(text)
+        guessed = guessing(stats)
+        if not (bad or guessed or low_confidence(stats)):
+            return text
+        log.warning("Распознавание сомнительное (%s) — повторяю без подсказки",
+                    bad or ("угадывание" if guessed else "низкая уверенность"))
+        text2, stats2 = self._decode(audio, lang, None, guess=False)
+        again = garbage_reason(text2)
+        if again:
+            if bad or guessed:
+                log.warning("Повтор тоже мусор (%s) — текст не вставляю", again)
+                return ""
+            return text
+        if bad or guessed or _mean(stats2) >= _mean(stats):
+            return text2
+        return text
+
+    def _decode(self, audio: np.ndarray, lang: str, prompt: str | None, guess: bool
+                ) -> tuple[str, list[tuple[float | None, float]]]:
+        """Один проход faster-whisper под замком: текст и (температура, средняя уверенность)
+        сегментов. guess=False — без повторов с повышенной температурой (только 0)."""
+        assert self._model is not None
+        kw: dict[str, Any] = {} if guess else {"temperature": 0.0}
+        segs, _info = self._model.transcribe(
+            audio,
+            language=lang,
+            beam_size=self.s.beam_size,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 500},
+            condition_on_previous_text=False,
+            without_timestamps=True,
+            initial_prompt=prompt,
+            **kw,
+        )
+        segs = list(segs)
+        text = " ".join(s.text.strip() for s in segs).strip()
+        return text, [(getattr(s, "temperature", None), float(getattr(s, "avg_logprob", 0.0)))
+                      for s in segs]
 
 
 def load_wav(path: str) -> np.ndarray:

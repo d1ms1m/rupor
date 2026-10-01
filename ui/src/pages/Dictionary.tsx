@@ -16,9 +16,10 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ImportExport } from "../components/ImportExport";
 import { LearnModePicker, LearnText } from "../components/Learn";
+import { JOURNAL_LIMIT, LearnJournal } from "../components/LearnJournal";
 import { Button, ChipInput, IconButton, Input, Switch } from "../components/ui/controls";
 import { Card, EmptyState, LoadError, PageHeader, SettingRow, Skeleton } from "../components/ui/display";
 import { Tabs } from "../components/ui/tabs";
@@ -30,7 +31,7 @@ import { errorText } from "../lib/hub";
 import { isLearnNotice, onDictChanged } from "../lib/learn";
 import { navigate } from "../lib/router";
 import { useCore } from "../lib/store";
-import type { DictItem, LearnMode } from "../lib/types";
+import type { DictItem, LearnJournalEntry, LearnMode } from "../lib/types";
 import { call } from "../lib/ws";
 
 type DictTab = "terms" | "vocab";
@@ -38,13 +39,21 @@ type DictTab = "terms" | "vocab";
 export function DictionaryPage({ tab }: { tab?: string | null }) {
   const current: DictTab = tab === "vocab" ? "vocab" : "terms";
   const list = useLoad(() => call("dict_list"));
+  // Журнал обучения («Недавно добавлено»): импорт с заменой очищает и его — перечитать оба.
+  const journal = useLoad(() => call("dict_learn_journal", { limit: JOURNAL_LIMIT }));
+  const { reload: reloadList } = list;
+  const { reload: reloadJournal } = journal;
+  const onImported = useCallback(() => {
+    reloadList();
+    reloadJournal();
+  }, [reloadList, reloadJournal]);
   const count = list.data?.length ?? 0;
   return (
     <div>
       <PageHeader
         title={t("dictionary.title")}
         subtitle={current === "vocab" ? t("vocab.subtitle") : t("dictionary.subtitle")}
-        actions={current === "terms" ? <TermsActions onImported={list.reload} /> : undefined}
+        actions={current === "terms" ? <TermsActions onImported={onImported} /> : undefined}
       />
       <Tabs
         value={current}
@@ -63,7 +72,7 @@ export function DictionaryPage({ tab }: { tab?: string | null }) {
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.18 }}
         >
-          {current === "vocab" ? <VocabPanel /> : <TermsTab list={list} />}
+          {current === "vocab" ? <VocabPanel /> : <TermsTab list={list} journal={journal} />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -88,7 +97,7 @@ function TermsActions({ onImported }: { onImported: () => void }) {
 
 const NEW_TERM_EVENT = "rupor:dict-new-term";
 
-function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
+function TermsTab({ list, journal }: { list: Loadable<DictItem[]>; journal: Loadable<LearnJournalEntry[]> }) {
   const toast = useToast();
   const { settings } = useCore();
   const fuzzy = settings?.dict_fuzzy ?? true;
@@ -101,11 +110,22 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
   }, []);
 
   // Рупор выучил правку (dict_undo — уже в словаре) или её отменили/добавили кнопкой
-  // уведомления (в пилюле или тосте) — перечитать словарь.
+  // уведомления (в пилюле или тосте) — перечитать словарь и «Недавно добавлено».
+  const { reload: reloadList } = list;
+  const { reload: reloadJournal } = journal;
   useEvent("notice", (n) => {
-    if (isLearnNotice(n) && n.action === "dict_undo") list.reload();
+    if (!isLearnNotice(n)) return;
+    reloadJournal();
+    if (n.action === "dict_undo") reloadList();
   });
-  useEffect(() => onDictChanged(list.reload), [list.reload]);
+  useEffect(
+    () =>
+      onDictChanged(() => {
+        reloadList();
+        reloadJournal();
+      }),
+    [reloadList, reloadJournal],
+  );
 
   const locale = useLocale();
   const items = useMemo(() => {
@@ -128,6 +148,7 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
         const rest = (xs ?? []).filter((x) => x.id !== saved.id && x.id !== id);
         return [...rest, saved];
       });
+      reloadJournal();
       setEditing(null);
       return true;
     } catch (e) {
@@ -140,6 +161,7 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
     list.setData((xs) => (xs ?? []).filter((x) => x.id !== d.id));
     try {
       await call("dict_delete", { id: d.id });
+      reloadJournal();
       toast({
         tone: "info",
         title: t("dictionary.deleted", { term: d.term }),
@@ -154,12 +176,40 @@ function TermsTab({ list }: { list: Loadable<DictItem[]> }) {
     }
   };
 
+  /**
+   * «Отменить» в «Недавно добавлено» — как кнопка уведомления (dict_learn_undo): строка
+   * исчезает сразу, словарь перечитывается, тост говорит, что именно убрано.
+   */
+  const undoLearned = async (e: LearnJournalEntry) => {
+    journal.setData((xs) => (xs ?? []).filter((x) => x !== e));
+    try {
+      await call("dict_learn_undo", { term: e.term, variant: e.variant, id: e.id, created: e.created });
+      const after = await call("dict_list");
+      list.setData(() => after);
+      const gone = !after.some((d) => d.id === e.id);
+      toast({
+        tone: "success",
+        duration: 2600,
+        title: gone
+          ? t("learn.undoneTerm", { term: e.term })
+          : e.variant
+            ? t("learn.undoneVariant", { term: e.term, variant: e.variant })
+            : t("learn.undone"),
+      });
+    } catch (err) {
+      reloadList();
+      toast({ tone: "error", title: t("learn.undoFailed"), description: errorText(err) });
+    }
+    reloadJournal();
+  };
+
   const count = list.data?.length ?? 0;
 
   return (
     <div>
       <FuzzyCard />
       <LearnCard />
+      <LearnJournal entries={journal.data ?? []} onUndo={(e) => void undoLearned(e)} />
 
       {count > 0 && (
         <div className="mb-4 flex items-center gap-3">

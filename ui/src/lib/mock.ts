@@ -30,7 +30,9 @@ import type {
   HistoryTarget,
   KeyProvider,
   LanguagePref,
+  LearnJournalEntry,
   LearnMode,
+  LearnSource,
   NoticeEvent,
   RdpWindow,
   Settings,
@@ -126,6 +128,8 @@ const USAGE_BEFORE: AiUsageTotals = { calls: 1412, tokens_in: 689_000, tokens_ou
 const BALANCE_START = 12.34;
 const BALANCE_USED = 5.67;
 const BALANCE_CACHE_MS = 5 * 60_000;
+// Журнал обучения, как у ядра: хранится не больше 300 записей, отдаётся по 50.
+const JOURNAL_MAX = 300;
 
 type MockData = typeof dataRu;
 const DATA: Record<Locale, MockData> = { ru: dataRu, en: dataEn as MockData };
@@ -303,6 +307,8 @@ export class MockBackend implements Backend {
   private learnIdx = 0;
   /** suggest: сколько раз пользователь сделал ту же правку (вариант → термин). */
   private learnSeen = new Map<string, number>();
+  /** Журнал обучения (dict_learn_journal): что изменила каждая выученная правка, старые первыми. */
+  private journal: LearnJournalEntry[] = [];
 
   constructor(opts: MockOptions) {
     this.opts = opts;
@@ -338,6 +344,7 @@ export class MockBackend implements Backend {
     }
     if (opts.learn) this.settings.learn_mode = opts.learn;
     this.dict = this.initialDict();
+    if (!opts.firstRun) this.journal = this.initialJournal();
     this.snippets = this.data.snippets.map((s) => ({ id: this.nextId++, trigger: s.trigger, text: s.text }));
     if (opts.aiOff) this.settings.ai_enabled = false;
     this.state.ai_enabled = this.settings.ai_enabled;
@@ -855,6 +862,48 @@ export class MockBackend implements Backend {
     return this.data.dictionary.map((d) => ({ id: this.nextId++, term: d.term, variants: [...d.variants] }));
   }
 
+  /**
+   * Демо-журнал обучения: будто последние варианты нескольких терминов словарь выучил сам
+   * или вы подтвердили их кнопкой «Добавить» (раздел «Недавно добавлено» на странице «Словарь»).
+   */
+  private initialJournal(): LearnJournalEntry[] {
+    const now = Date.now() / 1000;
+    const plan: [term: string, created: boolean, source: LearnSource, agoSec: number][] = [
+      ["S3", true, "auto", 26 * 3600],
+      ["Airflow", false, "accepted", 3 * 3600 + 600],
+      ["Metabase", false, "auto", 7 * 60],
+    ];
+    const out: LearnJournalEntry[] = [];
+    for (const [term, created, source, ago] of plan) {
+      const d = this.dict.find((x) => x.term === term);
+      const variant = d?.variants[d.variants.length - 1];
+      if (d && variant) out.push({ id: d.id, term: d.term, variant, created, ts: now - ago, source });
+    }
+    return out;
+  }
+
+  private journalPush(e: LearnJournalEntry): void {
+    this.journal = [...this.journal, e].slice(-JOURNAL_MAX);
+  }
+
+  /** Как _journal_drop ядра: термин удалён вручную (id=null — весь словарь) — его правки не откатываются. */
+  private journalDrop(id: number | null): void {
+    this.journal = id === null ? [] : this.journal.filter((e) => e.id !== id);
+  }
+
+  /** Убрать из журнала запись отменяемой правки (при нескольких — с этим id, иначе последнюю). */
+  private journalPop(term: string, variant: string, created: boolean, id: number | null): void {
+    const tm = term.trim().toLowerCase();
+    let v = variant.trim().toLowerCase();
+    if (v === tm) v = "";
+    const match = this.journal
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.term.toLowerCase() === tm && e.variant.toLowerCase() === v && e.created === created);
+    const exact = match.filter(({ e }) => id !== null && e.id === id);
+    const hit = (exact.length ? exact : match).at(-1);
+    if (hit) this.journal = this.journal.filter((_, i) => i !== hit.i);
+  }
+
   private learnKnown(s: LearnSample): boolean {
     const d = this.dict.find((x) => x.term.toLowerCase() === s.term.toLowerCase());
     if (!d) return false;
@@ -876,21 +925,28 @@ export class MockBackend implements Backend {
     return fill(tpl, { term: s.term, variant: s.variant });
   }
 
-  /** Как dict_learn_accept ядра: слить с существующим термином без дублей. */
-  private learnAdd(term: string, variant: string): { item: DictItem; created: boolean } {
+  /**
+   * Как dict_learn_accept ядра: слить с существующим термином без дублей. Изменение словаря
+   * записывается в журнал обучения с источником source (auto — выучено само, accepted —
+   * кнопка «Добавить»).
+   */
+  private learnAdd(term: string, variant: string, source: LearnSource): { item: DictItem; created: boolean } {
     const tm = term.trim();
     const v = variant.trim();
     if (!tm) throw new BackendError(this.tx.learnEmpty, "dict_learn_accept");
     const caseOnly = v.toLowerCase() === tm.toLowerCase();
+    const ts = Date.now() / 1000;
     const existing = this.dict.find((d) => d.term.toLowerCase() === tm.toLowerCase());
     if (existing) {
       if (v && !caseOnly && !existing.variants.some((x) => x.toLowerCase() === v.toLowerCase())) {
         existing.variants.push(v);
+        this.journalPush({ id: existing.id, term: existing.term, variant: v, created: false, ts, source });
       }
       return { item: structuredClone(existing), created: false };
     }
     const item: DictItem = { id: this.nextId++, term: tm, variants: v && !caseOnly ? [v] : [] };
     this.dict.push(item);
+    this.journalPush({ id: item.id, term: tm, variant: caseOnly ? "" : v, created: true, ts, source });
     return { item: structuredClone(item), created: true };
   }
 
@@ -916,6 +972,7 @@ export class MockBackend implements Backend {
     let smp = pick();
     if (!smp && force) {
       this.dict = this.initialDict();
+      this.journal = this.initialJournal();
       this.learnSeen.clear();
       smp = pick();
     }
@@ -935,7 +992,7 @@ export class MockBackend implements Backend {
       });
       return;
     }
-    const r = this.learnAdd(smp.term, smp.variant);
+    const r = this.learnAdd(smp.term, smp.variant, "auto");
     this.learnIdx++;
     this.hub.emit("notice", {
       text: this.learnText("auto", smp),
@@ -1171,11 +1228,12 @@ export class MockBackend implements Backend {
       case "dict_delete": {
         const a = rawArgs as CommandArgs<"dict_delete">;
         this.dict = this.dict.filter((d) => d.id !== a.id);
+        this.journalDrop(a.id);
         return null;
       }
       case "dict_learn_accept": {
         const a = rawArgs as CommandArgs<"dict_learn_accept">;
-        return this.learnAdd(a.term, a.variant).item;
+        return this.learnAdd(a.term, a.variant, "accepted").item;
       }
       case "dict_learn_undo": {
         const a = rawArgs as CommandArgs<"dict_learn_undo">;
@@ -1184,12 +1242,23 @@ export class MockBackend implements Backend {
           (a.id !== null ? this.dict.find((x) => x.id === a.id) : undefined) ??
           this.dict.find((x) => x.term.toLowerCase() === term);
         if (!d) throw new BackendError(fill(this.tx.learnNotFound, { term: a.term }), cmd);
-        if (a.created) this.dict = this.dict.filter((x) => x !== d);
-        else {
-          const v = a.variant.trim().toLowerCase();
-          d.variants = d.variants.filter((x) => x.toLowerCase() !== v);
-        }
+        this.journalPop(a.term, a.variant, a.created, a.id);
+        // Как ядро: вариант убирается, а созданный правкой термин удаляется, только если
+        // других вариантов в нём не осталось.
+        const v = a.variant.trim().toLowerCase();
+        d.variants = d.variants.filter((x) => x.toLowerCase() !== v);
+        if (a.created && d.variants.length === 0) this.dict = this.dict.filter((x) => x !== d);
         return null;
+      }
+      case "dict_learn_journal": {
+        const a = (rawArgs ?? {}) as CommandArgs<"dict_learn_journal">;
+        const limit = Math.max(0, Math.min(JOURNAL_MAX, Math.trunc(a.limit ?? 50)));
+        // Записи терминов, которых уже нет (или их переименовали), не показываем — отменять нечего.
+        return this.journal
+          .filter((e) => this.dict.some((d) => d.id === e.id && d.term.toLowerCase() === e.term.toLowerCase()))
+          .reverse()
+          .slice(0, limit)
+          .map((e) => ({ ...e }));
       }
       case "snippets_list":
         return structuredClone(this.snippets);
@@ -1224,6 +1293,7 @@ export class MockBackend implements Backend {
         const a = rawArgs as CommandArgs<"import_data">;
         if (a.replace) {
           this.dict = [];
+          this.journalDrop(null);
           this.snippets = [];
         }
         let nd = 0;

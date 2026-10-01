@@ -496,6 +496,10 @@ class GestureMachine:
         for kind, ch in self._chords:
             if vk == ch.vk and mods == ch.mods:
                 self._swallow(vk)
+                # Основная клавиша проглочена, а Alt/Win сочетания дошли до системы: их
+                # отпускание маскируем (vkE8), иначе Alt откроет меню окна, Win — «Пуск»
+                # (Win+Alt+V; у Ctrl+Alt+Shift+V меню и так гасит Ctrl)
+                self._mask_vks |= self._held & _MASK_VKS
                 acts = [Action(kind)]
                 if self.state is _S.HELD:  # ptt входил в сочетание — это не диктовка
                     self.state = _S.WAIT_UP

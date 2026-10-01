@@ -167,6 +167,8 @@ pub fn run() {
             commands::quit_app,
             commands::set_pill_passthrough,
             commands::reset_pill_position,
+            commands::pill_raise,
+            commands::pill_log,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

@@ -8,6 +8,14 @@ All notable changes to Rupor are listed here. The format follows
 
 ### Added
 
+- **The indicator no longer disappears.** It is put back on top every time another window is
+  activated and when recording starts (a full-screen RDP window used to cover it), returns to
+  the primary monitor if a display change leaves it off-screen, reloads itself if its WebView2
+  page crashes or keeps hanging (the whole shell restarts if the browser process dies; GPU
+  process restarts are left to WebView2), and re-renders after an error instead of staying an
+  empty transparent window. Errors are written to `ui.log`. New tray item *Bring back the
+  indicator* does all of that by hand and remembers the default position.
+
 - **Similar spellings: one dictionary term is enough.** Spellings that sound like a term are
   fixed without listing variants — Latin or Cyrillic, joined or split, with Russian case endings:
   "Zenobowser", «Xena браузер», «в зенно браузере» → ZennoBrowser. On by default; switch:
@@ -19,7 +27,27 @@ All notable changes to Rupor are listed here. The format follows
   variants work; paths, addresses and file names are left alone. Words it would replace are also kept out of the recognition hint
   and the AI's term list. The build self-check now covers the spell checker.
 
+- **See how the dictionary fills up.** Dictionary → *Recently added* lists the words learned
+  from your corrections: what was added, when, and whether Rupor added it or you confirmed it,
+  with an Undo button on each row (`dict_learn_journal`). In *Add automatically* mode every
+  correction that passes the filters is now added right away with an Undo notification, which
+  stays for 12 seconds; doubtful ones used to be only suggested, and the question was easy to
+  miss. *Ask first* still asks.
+
 ### Fixed
+
+- **AI cleanup works with "thinking" models.** Requests to OpenRouter now turn reasoning off,
+  so models such as DeepSeek V4.1 Flash no longer spend the answer budget on thinking and
+  return nothing. On 20 Russian test dictations DeepSeek V4.1 Flash was more accurate than
+  Claude Haiku 4.5 (WER 2.4 % vs 4.0 %), about twice as fast and ~15× cheaper.
+- **No more garbage from recognition.** When Whisper is unsure it falls back to guessing and
+  could produce CJK characters, random letter sets ("jpuy, jpac") or subtitle phrases
+  («ДИНАМИЧНАЯ МУЗЫКА»), which were inserted as is and even became "frequent words" that
+  poisoned the next hints. Such output is now recognised again without the hint and without
+  guessing; if it is still garbage, nothing is inserted (*No speech detected*).
+
+- Shortcuts for *Paste last* / *Copy last* that include Alt or Win (for example Win+Alt+V) no
+  longer open the window menu or the Start menu when the keys are released.
 
 - **The dictionary has the last word.** AI cleanup could put back a misrecognition that is in
   the dictionary as a variant ("Xenoposter" instead of "Zennoposter"). The AI's reply now goes

@@ -107,6 +107,7 @@ def test_openrouter_request_format(rec: Recorder) -> None:
     assert b["temperature"] == 0
     assert b["max_tokens"] >= 300
     assert b["usage"] == {"include": True}
+    assert b["reasoning"] == {"enabled": False}  # «думающие» модели иначе молчат
     assert "provider" not in b  # provider.order не задан — не передаём
     assert b["messages"][0]["role"] == "system"
     assert b["messages"][0]["content"].startswith(ai.BASE_PROMPT)

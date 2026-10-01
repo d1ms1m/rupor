@@ -71,6 +71,7 @@ export interface TrayLabels {
   mode_clipboard: string;
   style: string;
   last_insert: string;
+  pill_restore: string;
   rdp: string;
   rdp_empty: string;
   open: string;
@@ -124,6 +125,29 @@ export async function showMain(route?: string): Promise<void> {
 export async function resetPillPosition(): Promise<void> {
   if (!inTauri()) return;
   await invoke("reset_pill_position");
+}
+
+/** Пилюлю — наверх слоя «поверх всех» (её могло закрыть, например, полноэкранное RDP). */
+export async function pillRaise(): Promise<void> {
+  if (!inTauri()) return;
+  try {
+    await invoke("pill_raise");
+  } catch (e) {
+    console.warn("pill_raise", e);
+  }
+}
+
+/** Ошибка страницы пилюли — в журнал оболочки (ui.log), чтобы пропажа не была молчаливой. */
+export async function pillLog(level: "error" | "warn" | "info", message: string): Promise<void> {
+  if (!inTauri()) {
+    console.warn("pill", level, message);
+    return;
+  }
+  try {
+    await invoke("pill_log", { level, message });
+  } catch (e) {
+    console.warn("pill_log", e);
+  }
 }
 
 export async function quitApp(): Promise<void> {

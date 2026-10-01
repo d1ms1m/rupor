@@ -682,6 +682,9 @@ def _openrouter(system: str, user: str, s: object, key: str, timeout: float,
         "temperature": 0,
         "max_tokens": max_tokens,
         "usage": {"include": True},
+        # Очистке рассуждения не нужны: «думающие» модели (DeepSeek V4 Flash и др.) иначе
+        # тратят на них лимит ответа и возвращают пустой текст; у прочих — ничего не меняет
+        "reasoning": {"enabled": False},
     }
     order = _list_setting(s, "ai_provider_order")
     if order:

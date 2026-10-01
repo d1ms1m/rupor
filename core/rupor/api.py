@@ -18,6 +18,7 @@ from . import ai, broadcast, config, credman, fetch, winutil
 from .config import app_dir
 from .engine import Engine, history_display, styles_localized
 from .i18n import tr
+from .storage import LEARN_JOURNAL_MAX
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +119,7 @@ class Api:
             "dict_delete": self._dict_delete,
             "dict_learn_accept": self._dict_learn_accept,
             "dict_learn_undo": self._dict_learn_undo,
+            "dict_learn_journal": self._dict_learn_journal,
             "snippets_list": lambda a: self.storage.snippets_list(),
             "snippet_upsert": self._snippet_upsert,
             "snippet_delete": self._snippet_delete,
@@ -257,7 +259,8 @@ class Api:
         self.storage.dict_delete(_int(a, "id"))
         return None
 
-    # Обучение словаря на правках: кнопки уведомлений «Добавить» (suggest) и «Отменить» (auto)
+    # Обучение словаря на правках: кнопки уведомлений «Добавить» (suggest) и «Отменить» (auto),
+    # журнал выученного — «Недавно добавлено» на странице «Словарь»
 
     def _learn_args(self, a: dict[str, Any]) -> tuple[str, str]:
         term = _str(a, "term").strip()
@@ -276,6 +279,12 @@ class Api:
         term, variant = self._learn_args(a)
         self.e.learn_undo(term, variant, _opt_int(a, "id"), _bool(a, "created"))
         return None
+
+    def _dict_learn_journal(self, a: dict[str, Any]) -> list[dict[str, Any]]:
+        limit = _int(a, "limit", 50)
+        if not 0 <= limit <= LEARN_JOURNAL_MAX:
+            raise ApiError(tr("api.limit_range", lo=0, hi=LEARN_JOURNAL_MAX))
+        return self.storage.dict_learn_journal(limit)
 
     def _snippet_upsert(self, a: dict[str, Any]) -> dict[str, Any]:
         return self.storage.snippet_upsert(_opt_int(a, "id"), _str(a, "trigger"),

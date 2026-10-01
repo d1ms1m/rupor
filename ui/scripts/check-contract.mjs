@@ -608,6 +608,40 @@ await step("dict_learn_accept (новый термин) → DictItem, без д�
     throw e;
   }
 });
+// «Недавно добавлено» на странице «Словарь»: журнал обучения, свежие сверху
+const learnJournalMine = async (limit) => {
+  const d = (await call("dict_list")).find((x) => x.term === LT);
+  assert(d, "термина нет");
+  return (await call("dict_learn_journal", { limit })).filter((e) => e.id === d.id && e.term === LT);
+};
+await step("dict_learn_journal {limit} → свежие сверху, «Добавить» — source=accepted", async () => {
+  try {
+    const j = await call("dict_learn_journal", { limit: 10 });
+    assert(j.length <= 10, `limit 10 → ${j.length}`);
+    const ts = j.map((e) => e.ts).filter((x) => x !== null);
+    assert(ts.every((x, i) => i === 0 || ts[i - 1] >= x), "не свежие сверху");
+    // повтор той же правки словарь не меняет — в журнале две записи: второй вариант и новый термин
+    const mine = await learnJournalMine(300);
+    assert(mine.length === 2, `записей «${LT}»: ${short(mine)}`);
+    assert(mine[0].variant === LV2 && mine[0].created === false, `свежая: ${short(mine[0])}`);
+    assert(mine[1].variant === LV1 && mine[1].created === true, `первая: ${short(mine[1])}`);
+    assert(mine.every((e) => e.source === "accepted"), `source: ${short(mine.map((e) => e.source))}`);
+    const now = Date.now() / 1000;
+    assert(mine.every((e) => typeof e.ts === "number" && Math.abs(now - e.ts) < 300), `ts: ${short(mine.map((e) => e.ts))}`);
+    const all = await call("dict_learn_journal", {});
+    assert(all.length <= 50, `по умолчанию не больше 50 → ${all.length}`);
+    assert((await call("dict_learn_journal", { limit: 0 })).length === 0, "limit 0 — не пусто");
+    return `записей ${all.length}, проверочных ${mine.length}`;
+  } catch (e) {
+    await learnCleanup();
+    throw e;
+  }
+});
+await step("dict_learn_journal с неверным limit — ошибка на языке интерфейса", async () => {
+  await callErr("dict_learn_journal", { limit: -1 });
+  await callErr("dict_learn_journal", { limit: 301 });
+  return callErr("dict_learn_journal", { limit: "много" });
+});
 await step("dict_learn_undo (created=false) → null, убран только вариант", async () => {
   try {
     const d = (await call("dict_list")).find((x) => x.term === LT);
@@ -618,6 +652,9 @@ await step("dict_learn_undo (created=false) → null, убран только в
     assert(after && after.variants.length === 1 && after.variants[0] === LV1, short(after));
     // повторная отмена той же правки ничего не ломает
     assert((await call("dict_learn_undo", { term: LT, variant: LV2, id: d.id, created: false })) === null, "не null");
+    // отменённая правка из «Недавно добавлено» пропала, первая осталась
+    const mine = await learnJournalMine(300);
+    assert(mine.length === 1 && mine[0].variant === LV1 && mine[0].created === true, `журнал: ${short(mine)}`);
   } catch (e) {
     await learnCleanup();
     throw e;

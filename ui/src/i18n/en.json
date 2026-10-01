@@ -114,6 +114,7 @@
     "modeClipboard": "Paste via clipboard",
     "style": "Style",
     "lastInsert": "Paste last",
+    "pillRestore": "Bring back the indicator",
     "rdp": "Broadcast to RDP",
     "rdpEmpty": "No open RDP sessions",
     "open": "Open Rupor",
@@ -388,6 +389,16 @@
       "exampleAuto": "Added to dictionary: “{variant}” → {term}",
       "exampleSuggest": "Add to dictionary: “{variant}” → {term}?",
       "privacy": "Rupor reads only the field it inserted text into, and only for 1 minute after inserting. Doesn't work in RDP windows."
+    },
+    "journal": {
+      "title": "Recently added",
+      "hint": "What went into the dictionary from your corrections. Undo removes it, and Rupor won't learn that fix again.",
+      "sourceAuto": "added by Rupor",
+      "sourceAutoHint": "Rupor noticed you corrected a word and added the fix on its own",
+      "sourceAccepted": "you confirmed",
+      "sourceAcceptedHint": "You pressed Add when Rupor asked",
+      "newTerm": "new term",
+      "more": "Show more"
     }
   },
   "snippets": {

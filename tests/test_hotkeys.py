@@ -668,6 +668,32 @@ def test_win_pressed_first_is_not_swallowed(cw: GestureMachine) -> None:
     assert cw.mask is True                          # отпускание Win маскируем — «Пуск» не откроется
 
 
+def test_win_alt_v_inserts_last_and_masks_menu_and_start() -> None:
+    """Win+Alt+V при диктовке на Ctrl+Win: «вставить последнее», V проглочена, отпускание
+    Alt и Win маскируется (не откроется ни меню окна, ни «Пуск»); диктовка не начинается."""
+    m = GestureMachine(parse_ptt("ctrl+win"), key_group("shift"), key_group("esc"),
+                       tap_max_ms=250, double_tap_ms=400, command_mod=key_group("alt"),
+                       insert_last=parse_chord("win+alt+v"))
+    assert kinds(m.key_down(LWIN, 1000)) == []
+    assert kinds(m.key_down(LALT, 1010)) == []
+    assert kinds(m.key_down(V, 1020)) == [Kind.INSERT_LAST]
+    assert m.swallow is True
+    m.key_up(V, 1100)
+    assert m.swallow is True
+    m.key_up(LALT, 1110)
+    assert m.swallow is False and m.mask is True
+    m.key_up(LWIN, 1120)
+    assert m.swallow is False and m.mask is True
+    # в другом порядке — так же
+    m.key_down(LALT, 2000)
+    m.key_down(LWIN, 2010)
+    assert kinds(m.key_down(V, 2020)) == [Kind.INSERT_LAST]
+    # без Alt — не наше сочетание (Win+V — журнал буфера обмена Windows)
+    m.key_up(V, 2100)
+    m.key_up(LALT, 2110)
+    assert kinds(m.key_down(V, 2200)) == [] and m.swallow is False
+
+
 def test_hook_ignores_mstsc_sync_copies(cw: GestureMachine,
                                         monkeypatch: pytest.MonkeyPatch) -> None:
     """mstsc вбрасывает копии Ctrl с меткой 0x4321DCBA — это не нажатия пользователя."""

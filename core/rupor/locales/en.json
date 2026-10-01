@@ -62,6 +62,7 @@
   "api.key_whitespace": "The key can't contain spaces or line breaks",
   "api.limit_negative": "limit can't be negative",
   "api.limit_offset_negative": "limit and offset can't be negative",
+  "api.limit_range": "limit must be between {lo} and {hi}",
   "api.openrouter_key_missing": "No OpenRouter key set",
   "api.patch_not_object": "patch must be an object {{key: value}}",
   "api.rdp_key_missing": "No RDP session specified (key)",

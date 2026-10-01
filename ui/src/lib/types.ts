@@ -89,6 +89,28 @@ export interface DictItem {
   variants: string[];
 }
 
+/**
+ * Кто пополнил словарь: auto — Рупор выучил правку и добавил сам, accepted — вы нажали
+ * «Добавить» на предложении.
+ */
+export type LearnSource = "auto" | "accepted";
+
+/** Запись журнала обучения (dict_learn_journal): что изменила одна выученная правка. */
+export interface LearnJournalEntry {
+  /** id термина в словаре. */
+  id: number;
+  /** Термин (как надо). */
+  term: string;
+  /** Добавленный вариант (как было распознано); "" — правка только создала термин. */
+  variant: string;
+  /** Термин создан этой правкой (отмена удалит его, если других вариантов не осталось). */
+  created: boolean;
+  /** Когда, unix сек; null — запись из версии, где время не сохранялось. */
+  ts: number | null;
+  /** null — запись из версии, где источник не сохранялся. */
+  source: LearnSource | null;
+}
+
 export interface Snippet {
   id: number;
   trigger: string;
@@ -394,6 +416,11 @@ export interface CommandMap {
   dict_learn_accept: { args: { term: string; variant: string }; result: DictItem };
   /** Отменить автодобавление: created — удалить термин целиком, иначе убрать только вариант. */
   dict_learn_undo: { args: LearnData; result: null };
+  /**
+   * Журнал обучения — что попало в словарь из правок, свежие сверху (limit 0–300, по
+   * умолчанию 50). Отмена записи — dict_learn_undo с её term, variant, id, created.
+   */
+  dict_learn_journal: { args: { limit?: number }; result: LearnJournalEntry[] };
   snippets_list: { args: void; result: Snippet[] };
   snippet_upsert: { args: { id?: number; trigger: string; text: string }; result: Snippet };
   snippet_delete: { args: { id: number }; result: null };

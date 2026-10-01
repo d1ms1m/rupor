@@ -136,11 +136,53 @@ pub fn reset_pill_position(app: AppHandle) -> Result<(), String> {
     crate::pill::reset_position(&app)
 }
 
+/// `pill_raise` — пилюля наверх слоя «поверх всех» (начало записи: её могло закрыть окно,
+/// которое тоже «поверх всех», например полноэкранный RDP).
+#[tauri::command]
+pub fn pill_raise() {
+    crate::pill::raise();
+}
+
+/// `pill_log {level, message}` — ошибка страницы пилюли в журнал оболочки (ui.log): иначе
+/// упавшая пилюля пропадает молча. Одна строка, не длиннее LOG_MESSAGE_MAX символов.
+#[tauri::command(rename_all = "snake_case")]
+pub fn pill_log(level: String, message: String) {
+    let msg = log_line(&message);
+    match level.as_str() {
+        "error" => crate::log_error!("Пилюля: {msg}"),
+        "warn" => crate::log_warn!("Пилюля: {msg}"),
+        _ => crate::log_info!("Пилюля: {msg}"),
+    }
+}
+
+const LOG_MESSAGE_MAX: usize = 500;
+
+/// Сообщение страницы → одна строка без управляющих символов, не длиннее LOG_MESSAGE_MAX.
+fn log_line(message: &str) -> String {
+    let one: String = message
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    one.chars().take(LOG_MESSAGE_MAX).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::tray::{Patch, RdpItem, TrayLabels};
     use serde_json::json;
+
+    #[test]
+    fn pill_log_line_is_one_short_line() {
+        assert_eq!(
+            log_line("TypeError: x\n    at Pill (pill.js:1)\r\n"),
+            "TypeError: x at Pill (pill.js:1)"
+        );
+        assert_eq!(log_line(&"я".repeat(900)).chars().count(), LOG_MESSAGE_MAX);
+    }
 
     /// Тело `invoke("update_tray", {...})` — как его отправляет фронтенд.
     #[test]
