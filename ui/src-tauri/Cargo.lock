@@ -2869,7 +2869,7 @@ dependencies = [
 
 [[package]]
 name = "rupor"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "getrandom 0.3.4",
  "serde",

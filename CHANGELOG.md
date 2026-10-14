@@ -6,6 +6,8 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-10-14
+
 ### Added
 
 - **The indicator no longer disappears.** It is put back on top every time another window is
@@ -15,7 +17,6 @@ All notable changes to Rupor are listed here. The format follows
   process restarts are left to WebView2), and re-renders after an error instead of staying an
   empty transparent window. Errors are written to `ui.log`. New tray item *Bring back the
   indicator* does all of that by hand and remembers the default position.
-
 - **Similar spellings: one dictionary term is enough.** Spellings that sound like a term are
   fixed without listing variants — Latin or Cyrillic, joined or split, with Russian case endings:
   "Zenobowser", «Xena браузер», «в зенно браузере» → ZennoBrowser. On by default; switch:
@@ -24,9 +25,9 @@ All notable changes to Rupor are listed here. The format follows
   "Xenoposter") from a word that merely sounds like a term («курсор», «редис», "cloud"). Terms
   made of two ordinary words and very short terms still need a variant; words you often
   dictate yourself count as real words; without the Windows spelling dictionaries only exact
-  variants work; paths, addresses and file names are left alone. Words it would replace are also kept out of the recognition hint
-  and the AI's term list. The build self-check now covers the spell checker.
-
+  variants work; paths, addresses and file names are left alone. Words it would replace are
+  also kept out of the recognition hint and the AI's term list. The build self-check now
+  covers the spell checker.
 - **See how the dictionary fills up.** Dictionary → *Recently added* lists the words learned
   from your corrections: what was added, when, and whether Rupor added it or you confirmed it,
   with an Undo button on each row (`dict_learn_journal`). In *Add automatically* mode every
@@ -117,5 +118,6 @@ First public release.
 - Tray icon, start with Windows, light and dark themes, first-run wizard; a per-user NSIS
   installer without administrator rights.
 
+[0.4.1]: https://github.com/listapad2024/rupor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/listapad2024/rupor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/listapad2024/rupor/releases/tag/v0.3.0
