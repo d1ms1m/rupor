@@ -414,7 +414,27 @@
     "aiTailInserted": "The original text was inserted instead",
     "insertFailed": "Couldn't insert the text: {error}. It's saved: use “Paste last” to insert it",
     "insertError": "The active window changed, so typing stopped and the rest of the text wasn't sent",
-    "adminWindow": "Administrator: Command Prompt - ssh deploy@srv-analytics-02"
+    "adminWindow": "Administrator: Command Prompt - ssh deploy@srv-analytics-02",
+    "noGpu": "No NVIDIA GPU with CUDA support found",
+    "modelDirLabel": "Model folder",
+    "modelDirRelative": "a full folder path is required — with a drive letter (D:\\Models\\whisper) or a network path (\\\\server\\share)",
+    "modelBusy": "The model is being moved or downloaded — wait until it finishes",
+    "progressMove": "Moving model {model}: {done} of {total} MB",
+    "modelMoved": "Model moved to {path}",
+    "moveNoSpace": "Not enough disk space for model {model}: need ≈{need} GB, {free} GB free ({path}). Free up space or choose another folder.",
+    "recommendGpu": "{gpu} graphics card with {vram} GB — the best model for Russian and English runs fast",
+    "recommendCpu": "No NVIDIA graphics card — on the processor ({threads}, {ram}) the small model recognizes speech reasonably fast",
+    "recThreads": {
+      "one": "{n} thread",
+      "other": "{n} threads"
+    },
+    "recRam": "{gb} GB of RAM",
+    "noteTiny": "Smallest and fastest, but makes many mistakes",
+    "noteBase": "Fast even on a modest computer, average accuracy",
+    "noteSmall": "A sensible choice without an NVIDIA graphics card",
+    "noteMedium": "More accurate than small but noticeably slower; slow on a processor",
+    "noteTurbo": "Best for Russian and English: almost as accurate as large-v3 but several times faster; needs an NVIDIA graphics card",
+    "noteLarge": "Most accurate and slowest; turbo is nearly as good"
   },
   "learnSamples": [
     {

@@ -174,6 +174,13 @@ export interface Settings {
   min_record_ms: number;
 
   model: string;
+  /**
+   * Папка моделей Whisper в формате кэша Hugging Face (models--org--name/blobs|snapshots|refs,
+   * как download_root у faster-whisper — её можно отдать и другим программам). "" — кэш
+   * Hugging Face по умолчанию (SetupStatus.model_dir_default). Путь — абсолютный.
+   * Сменить с переносом скачанной модели — команда model_dir_set.
+   */
+  model_dir: string;
   device: string;
   compute_type: string;
   beam_size: number;
@@ -269,9 +276,46 @@ export interface CudaCheck {
 }
 
 export interface SetupStatus {
+  /** Модель settings.model есть в папке model_dir. */
   model_ready: boolean;
   cuda_ready: boolean;
   first_run_done: boolean;
+  /** Папка, где Рупор сейчас ищет и куда качает модели (абсолютный путь). */
+  model_dir: string;
+  /** Кэш Hugging Face по умолчанию — папка при settings.model_dir = "". */
+  model_dir_default: string;
+}
+
+/** Оценка 1–5 в списке моделей (качество, скорость). */
+export type ModelRating = 1 | 2 | 3 | 4 | 5;
+
+/** Модель Whisper в выборе мастера (model_recommend). */
+export interface ModelOption {
+  /** Имя для settings.model: tiny, base, small, medium, large-v3-turbo, large-v3. */
+  model: string;
+  /** Репозиторий на Hugging Face (Systran/faster-whisper-…). */
+  repo: string;
+  /** Размер файлов модели, МБ. */
+  size_mb: number;
+  quality: ModelRating;
+  speed: ModelRating;
+  recommended: boolean;
+  /** Пояснение на языке интерфейса. */
+  note: string;
+}
+
+/** Модель под этот компьютер (мастер первого запуска). */
+export interface ModelRecommend {
+  gpu_name: string | null;
+  vram_mb: number | null;
+  /** CUDA работает (или видеокарта NVIDIA с драйвером есть, а библиотеки ещё не скачаны). */
+  cuda_ok: boolean;
+  ram_gb: number;
+  cpu_threads: number;
+  recommended: { model: string; device: "cuda" | "cpu"; compute_type: string };
+  /** Почему эта модель — на языке интерфейса. */
+  reason: string;
+  options: ModelOption[];
 }
 
 export interface ExportData {
@@ -401,6 +445,15 @@ export interface CommandMap {
   cuda_check: { args: void; result: CudaCheck };
   setup_status: { args: void; result: SetupStatus };
   setup_download: { args: { what: DownloadWhat }; result: null };
+  /**
+   * Сменить папку моделей (path "" — кэш Hugging Face по умолчанию). move — перенести туда
+   * скачанную модель: moving=true — перенос идёт в фоне (события progress what="model", по
+   * окончании — событие settings с новым model_dir и notice), иначе папка уже сменена, как
+   * обычной set_settings (модель перезагрузится оттуда или скачается туда).
+   */
+  model_dir_set: { args: { path: string; move: boolean }; result: { ok: true; moving: boolean } };
+  /** Модель под мощность компьютера (видеокарта, память, процессор) и список на выбор. */
+  model_recommend: { args: void; result: ModelRecommend };
   history_list: {
     args: { query?: string; limit?: number; offset?: number };
     result: { items: HistoryItem[]; total: number };

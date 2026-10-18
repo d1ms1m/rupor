@@ -2,7 +2,10 @@
 
 * Модель — в кэш HuggingFace, там же её ищет faster-whisper (``WhisperModel(...,
   local_files_only=True)``). Скачиваются только нужные файлы, как в
-  ``faster_whisper.utils.download_model``.
+  ``faster_whisper.utils.download_model``. Папка кэша — настройка ``model_dir`` (``cache_dir``
+  функций; ``None`` — кэш HuggingFace по умолчанию), тот же формат, что ``download_root``
+  у faster-whisper. ``move_model`` переносит скачанную модель в другую папку,
+  ``remove_model`` удаляет её из прежней.
 * Библиотеки CUDA — колесо ``nvidia-cublas-cu12`` с PyPI; из него извлекаются только
   ``nvidia/*/bin/*.dll`` в ``%LOCALAPPDATA%\\Rupor\\cuda``. CTranslate2 (faster-whisper) на GPU
   нужен только cuBLAS: cuDNN и NVRTC он не загружает (проверено на RTX 3060 Ti, все
@@ -13,8 +16,8 @@ TLS: и PyPI (urllib), и HuggingFace (httpx внутри huggingface_hub) пр�
 (Kaspersky, ESET…) и корпоративные прокси подменяют сертификат своим корнем, который лежит
 только в хранилище Windows, — одного certifi (так httpx делает по умолчанию) им мало.
 
-Сеть трогают только ``download_model`` и ``download_cuda``; ``model_ready`` и ``cuda_ready``
-работают офлайн. Ошибки загрузки — ``FetchError`` с текстом по-русски (его можно показать
+Сеть трогают только ``download_model``, ``download_cuda`` и ``model_sizes`` (размеры моделей
+для мастера); ``model_ready``, ``cuda_ready``, ``move_model`` и ``remove_model`` работают офлайн. Ошибки загрузки — ``FetchError`` с текстом по-русски (его можно показать
 пользователю как есть).
 """
 from __future__ import annotations
@@ -27,8 +30,10 @@ import http.client
 import json
 import logging
 import os
+import re
 import shutil
 import ssl
+import stat
 import sys
 import threading
 import time
@@ -308,18 +313,77 @@ def model_ready(model: str, cache_dir: str | Path | None = None) -> bool:
     return model_path(model, cache_dir) is not None
 
 
-def _expected_model_size(repo: str) -> int:
+# Размеры моделей по данным Hub (байты нужных файлов): удачные ответы — на весь процесс,
+# неудачные — не переспрашивать SIZE_RETRY_S (мастер без сети не ждёт каждый раз)
+_SIZES: dict[str, int] = {}
+_SIZES_FAILED: dict[str, float] = {}
+_SIZE_THREADS: dict[str, threading.Thread] = {}
+_SIZES_LOCK = threading.Lock()
+SIZE_RETRY_S = 300.0
+
+
+def _expected_model_size(repo: str, timeout: float = 10) -> int:
     """Суммарный размер нужных файлов по данным Hub (для честного процента); 0 — не знаем."""
+    with _SIZES_LOCK:
+        cached = _SIZES.get(repo)
+    if cached:
+        return cached
     _use_system_certs()
     try:
         from huggingface_hub import HfApi
         info = HfApi(library_name="rupor", library_version=_version()).model_info(
-            repo, files_metadata=True, timeout=10)
-        return sum(int(s.size or 0) for s in (info.siblings or [])
+            repo, files_metadata=True, timeout=timeout)
+        size = sum(int(s.size or 0) for s in (info.siblings or [])
                    if any(fnmatch.fnmatch(s.rfilename, pat) for pat in MODEL_FILES))
     except Exception as e:
         log.debug("Размер модели %s не узнать заранее: %s", repo, e)
         return 0
+    if size > 0:
+        with _SIZES_LOCK:
+            _SIZES[repo] = size
+    return size
+
+
+def _fetch_size(repo: str, timeout: float) -> None:
+    size = _expected_model_size(repo, timeout=timeout)
+    with _SIZES_LOCK:
+        if size > 0:
+            _SIZES[repo] = size
+            _SIZES_FAILED.pop(repo, None)
+        else:
+            _SIZES_FAILED[repo] = time.monotonic()
+
+
+def model_sizes(repos: Sequence[str], budget_s: float = 4.0) -> dict[str, int]:
+    """Размеры моделей по данным Hub (байты файлов MODEL_FILES): запросы параллельно, ждём
+    не дольше budget_s на все. Не успели, нет сети или Hub ответил ошибкой — репозитория
+    в ответе нет (берите запасной размер). Удачные ответы кэшируются на процесс."""
+    out: dict[str, int] = {}
+    waits: list[threading.Thread] = []
+    now = time.monotonic()
+    with _SIZES_LOCK:
+        for repo in dict.fromkeys(repos):
+            if repo in _SIZES:
+                out[repo] = _SIZES[repo]
+                continue
+            t = _SIZE_THREADS.get(repo)
+            if t is None or not t.is_alive():
+                failed = _SIZES_FAILED.get(repo)
+                if failed is not None and now - failed < SIZE_RETRY_S:
+                    continue
+                t = threading.Thread(target=_fetch_size, args=(repo, budget_s),
+                                     name="rupor-model-size", daemon=True)
+                _SIZE_THREADS[repo] = t
+                t.start()
+            waits.append(t)
+    deadline = time.monotonic() + budget_s
+    for t in waits:
+        t.join(max(0.0, deadline - time.monotonic()))
+    with _SIZES_LOCK:
+        for repo in repos:
+            if repo in _SIZES:
+                out[repo] = _SIZES[repo]
+    return out
 
 
 class _BarGroup:
@@ -532,6 +596,395 @@ def download_model(model: str, on_progress: ProgressFn,
         log.info("Модель %s скачана за %.0f с: %s", model, time.monotonic() - t0, p)
         rep.emit(100.0, tr("fetch.model_done", model=model), force=True)
         return str(p)
+
+
+# ---------------------------------------------------------------------------
+# Папка моделей (настройка model_dir): перенос и удаление
+# ---------------------------------------------------------------------------
+#
+# Папка — в формате кэша HuggingFace, как download_root у faster-whisper:
+#   models--<org>--<имя>/blobs/<хэш>          — файлы;
+#   models--<org>--<имя>/snapshots/<ревизия>/  — имена файлов (на Windows — относительные
+#                                                символьные ссылки на ../../blobs/<хэш>, если
+#                                                их можно создавать, иначе сами файлы);
+#   models--<org>--<имя>/refs/main             — ревизия (без неё local_files_only не найдёт);
+#   models--<org>--<имя>/trees/                — список файлов ревизии (проверка полноты);
+#   .locks/models--<org>--<имя>/               — замки загрузки.
+
+_REPO_RE = re.compile(r"[\w.-]+(?:/[\w.-]+)?")
+_LOCKS_DIR = ".locks"
+_TMP_SUFFIX = ".rupor-tmp"
+_WRITE_PROBE = ".rupor-write-test"
+
+
+def model_cache_dir(model_dir: str | Path | None) -> Path:
+    """Папка, где Рупор ищет модели и куда их качает: model_dir из настроек, а пустая
+    строка — кэш HuggingFace по умолчанию (HF_HUB_CACHE, обычно
+    %USERPROFILE%\\.cache\\huggingface\\hub)."""
+    return Path(os.path.abspath(_hf_cache_dir(model_dir or None)))
+
+
+def same_dir(a: str | Path, b: str | Path) -> bool:
+    """Одна и та же папка (без учёта регистра и вида записи пути)."""
+    return (os.path.normcase(os.path.abspath(os.fspath(a)))
+            == os.path.normcase(os.path.abspath(os.fspath(b))))
+
+
+def check_writable_dir(path: str | Path) -> Path:
+    """Создать папку (со всеми родительскими) и проверить, что в неё можно писать: создать и
+    удалить пробный файл. Ошибка — FetchError с понятным текстом."""
+    p = Path(path)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise FetchError(tr("fetch.mkdir_failed", path=p, error=_os_error(e))) from e
+    probe = p / f"{_WRITE_PROBE}-{os.getpid()}"
+    try:
+        with open(probe, "wb") as f:
+            f.write(b"ok")
+    except OSError as e:
+        raise FetchError(tr("fetch.dir_not_writable", path=p, error=_os_error(e))) from e
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return p
+
+
+def _os_error(e: OSError) -> str:
+    return e.strerror or str(e) or type(e).__name__
+
+
+def _repo_folder(repo: str) -> str:
+    """«org/name» → «models--org--name» — папка репозитория в кэше HuggingFace. Имя проверяется:
+    из него не должно выйти пути за пределы кэша."""
+    if not _REPO_RE.fullmatch(repo) or ".." in repo:
+        raise FetchError(tr("fetch.unknown_model", model=repo))
+    return "models--" + repo.replace("/", "--")
+
+
+def model_folder(model: str, cache_dir: str | Path | None) -> Path:
+    """Папка модели в кэше: <кэш>/models--org--name (модель задана своей папкой — она сама).
+    Неизвестная модель — FetchError."""
+    if os.path.isdir(model):
+        return Path(model)
+    return _hf_cache_dir(cache_dir) / _repo_folder(repo_id(model))
+
+
+def _same_volume(a: Path, b: Path) -> bool:
+    """a и b на одном томе — папку модели можно переименовать, а не копировать."""
+    try:
+        return os.stat(a).st_dev == os.stat(b).st_dev
+    except OSError:
+        return False
+
+
+def _rmtree(path: Path) -> bool:
+    """Удалить папку (или файл, ссылку) со всем содержимым; атрибут «только чтение» снимается.
+    True — по пути больше ничего нет. Ошибки — в лог."""
+    if not os.path.lexists(path):
+        return True
+
+    def onexc(func: Callable[..., Any], p: str, exc: BaseException) -> None:
+        if isinstance(exc, PermissionError):
+            try:
+                os.chmod(p, stat.S_IWRITE)
+                func(p)
+                return
+            except OSError:
+                pass
+        raise exc
+
+    try:
+        if os.path.islink(path) or not path.is_dir():
+            path.unlink()
+        else:
+            shutil.rmtree(path, onexc=onexc)
+    except OSError as e:
+        log.warning("Не удалось удалить %s: %s", path, e)
+    return not os.path.lexists(path)
+
+
+@dataclass
+class _CopyItem:
+    rel: str            # путь внутри папки модели
+    src: Path           # что читать (для ссылки — файл, на который она ведёт)
+    size: int
+    link: str = ""      # относительная ссылка (как в исходной папке); "" — обычный файл
+    blob: str = ""      # ссылка ведёт на blobs/<хэш> этой же модели — имя блоба
+
+
+def _plan_copy(folder: Path) -> tuple[list[_CopyItem], list[_CopyItem], list[_CopyItem]]:
+    """Что копировать из папки модели: (ссылки snapshots, блобы, остальные файлы).
+    Недокачанные блобы (*.incomplete) не берутся. Ссылка наружу папки модели или по
+    абсолютному пути переносится как обычный файл (содержимое цели)."""
+    links: list[_CopyItem] = []
+    blobs: list[_CopyItem] = []
+    other: list[_CopyItem] = []
+    root = os.path.abspath(folder)
+    blobs_dir = os.path.join(root, "blobs")
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for d in dirnames:
+            if os.path.islink(os.path.join(dirpath, d)):
+                log.warning("Перенос модели: ссылка на папку пропущена: %s",
+                            os.path.join(dirpath, d))
+        for name in filenames:
+            p = os.path.join(dirpath, name)
+            rel = os.path.relpath(p, root)
+            if name.endswith(".incomplete"):
+                continue
+            if os.path.islink(p):
+                target = os.readlink(p)
+                real = os.path.realpath(p)
+                if not os.path.isfile(real):
+                    log.warning("Перенос модели: ссылка %s ведёт в никуда — пропущена", rel)
+                    continue
+                size = os.path.getsize(real)
+                inside = os.path.normcase(os.path.normpath(os.path.join(dirpath, target)))
+                try:
+                    within = (os.path.commonpath([inside, os.path.normcase(root)])
+                              == os.path.normcase(root))
+                except ValueError:  # другой диск
+                    within = False
+                if not os.path.isabs(target) and within:
+                    blob = ""
+                    if os.path.dirname(inside) == os.path.normcase(blobs_dir):
+                        blob = os.path.basename(inside)
+                    links.append(_CopyItem(rel, Path(real), size, os.path.normpath(target),
+                                           blob))
+                else:
+                    other.append(_CopyItem(rel, Path(real), size))
+                continue
+            item = _CopyItem(rel, Path(p), os.path.getsize(p))
+            if os.path.normcase(dirpath) == os.path.normcase(blobs_dir):
+                blobs.append(item)
+            else:
+                other.append(item)
+    return links, blobs, other
+
+
+def _copy_file(src: Path, dst: Path, report: Callable[[int], None]) -> None:
+    """Скопировать файл потоково, сообщая о каждом записанном куске (байты)."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with open(src, "rb") as fi, open(dst, "wb") as fo:
+        while True:
+            chunk = fi.read(_CHUNK)
+            if not chunk:
+                break
+            fo.write(chunk)
+            report(len(chunk))
+
+
+def _copy_model_folder(src: Path, tmp: Path, report: Callable[[int], None]) -> None:
+    """Скопировать папку модели src в tmp. Ссылки snapshots пересоздаются такими же
+    относительными; не вышло (нет права создавать ссылки) — на месте ссылки пишется сам файл,
+    а его блоб отдельно не копируется (место на диске не удваивается)."""
+    links, blobs, other = _plan_copy(src)
+    linked: set[str] = set()       # блобы, на которые осталась ссылка, — их копировать
+    inlined: set[str] = set()      # блобы, записанные вместо ссылки
+    for it in links:
+        dst = tmp / it.rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.symlink(it.link, dst)
+        except OSError as e:
+            log.debug("Ссылку %s не создать (%s) — копирую файл", it.rel, e)
+            _copy_file(it.src, dst, report)
+            if it.blob:
+                inlined.add(it.blob)
+            continue
+        if it.blob:  # ссылка не на блоб (внутри папки) — её цель и так копируется как файл
+            linked.add(it.blob)
+    for it in blobs:
+        name = os.path.normcase(os.path.basename(it.rel))   # как имена блобов в ссылках
+        if name in inlined and name not in linked:
+            continue
+        _copy_file(it.src, tmp / it.rel, report)
+    for it in other:
+        _copy_file(it.src, tmp / it.rel, report)
+
+
+def _copy_size(src: Path) -> int:
+    """Сколько байт займёт копия папки модели (с запасом на случай, когда ссылки создать
+    нельзя и файл, на который ведут две ссылки, запишется дважды)."""
+    links, blobs, other = _plan_copy(src)
+    rest = sum(it.size for it in other)
+    with_links = sum(it.size for it in blobs) + rest
+    referenced = {it.blob for it in links if it.blob}
+    without_links = (sum(it.size for it in links)
+                     + sum(it.size for it in blobs
+                           if os.path.normcase(os.path.basename(it.rel)) not in referenced)
+                     + rest)
+    return max(with_links, without_links)
+
+
+def _merge_into(tmp: Path, dst: Path) -> None:
+    """Переложить готовую копию tmp в уже существующую (неполную) папку модели dst: сначала
+    блобы и списки файлов, потом snapshots, последним refs — неполная копия не выглядит
+    полной ни в какой момент. Блоб с тем же именем (тот же хэш) уже на месте — оставить."""
+    order = ["blobs", "trees"]
+    order += [p.name for p in sorted(tmp.iterdir()) if p.name not in ("blobs", "trees",
+                                                                      "snapshots", "refs")]
+    order += ["snapshots", "refs"]
+    for sub in order:
+        base = tmp / sub
+        if not os.path.lexists(base):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(base, followlinks=False):
+            for name in filenames:
+                p = Path(dirpath) / name
+                target = dst / p.relative_to(tmp)
+                if (sub == "blobs" and target.is_file() and not target.is_symlink()
+                        and target.stat().st_size == p.lstat().st_size):
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if os.path.lexists(target) and (target.is_symlink() or not target.is_dir()):
+                    target.unlink()
+                _replace(p, target)
+
+
+def _move_locks(src: Path, dst: Path, name: str, rename: bool) -> None:
+    """Папку замков модели (.locks/models--…) — следом за моделью; не вышло — не беда."""
+    s, d = src / _LOCKS_DIR / name, dst / _LOCKS_DIR / name
+    if not s.is_dir() or os.path.lexists(d):
+        return
+    try:
+        d.parent.mkdir(parents=True, exist_ok=True)
+        if rename:
+            os.replace(s, d)
+        else:
+            shutil.copytree(s, d, symlinks=True)
+    except OSError as e:
+        log.debug("Замки модели не перенесены (%s): %s", name, e)
+
+
+def move_model(model: str, src_dir: str | Path | None, dst_dir: str | Path | None,
+               on_progress: ProgressFn) -> str:
+    """Перенести модель из кэша src_dir в кэш dst_dir (None — кэш HuggingFace по умолчанию)
+    и вернуть путь к её папке в dst_dir. Исходная копия не удаляется (это remove_model).
+
+    * в dst_dir модель уже целиком — ничего не копируется;
+    * тот же том, а папки модели в dst_dir нет — мгновенное переименование;
+    * другой том — копия во временную папку «models--<org>--<имя>.rupor-tmp» и переименование (прерванная
+      копия никогда не выглядит полной); прогресс — по байтам, как у загрузки. Относительные
+      ссылки snapshots сохраняются; если создавать ссылки нельзя — вместо ссылки сам файл,
+      без второй копии блоба. refs/ и trees/ копируются (refs/main нужен поиску без сети).
+    Перед копированием проверяется место на диске, после — что модель находится в dst_dir.
+    Ошибка — FetchError; временная копия при этом удаляется."""
+    rep = _Reporter(on_progress)
+    with _MODEL_LOCK:
+        if os.path.isdir(model):  # модель задана своей папкой: она не в кэше, переносить нечего
+            found = model_path(model)
+            if found is None:
+                raise FetchError(tr("fetch.model_dir_empty", model=model))
+            return str(found)
+        name = _repo_folder(repo_id(model))
+        src, dst = _hf_cache_dir(src_dir), _hf_cache_dir(dst_dir)
+        ready = model_path(model, dst)
+        if ready is not None:
+            rep.emit(100.0, tr("fetch.move_already", model=model, path=dst), force=True)
+            return str(ready)
+        if same_dir(src, dst) or model_path(model, src) is None:
+            raise FetchError(tr("fetch.move_no_model", model=model, path=src))
+        check_writable_dir(dst)
+        src_folder, dst_folder = src / name, dst / name
+        rep.emit(0.0, tr("fetch.move_start", model=model), force=True)
+        log.info("Переношу модель %s: %s → %s", model, src, dst)
+        t0 = time.monotonic()
+
+        if not os.path.lexists(dst_folder) and _same_volume(src_folder, dst):
+            try:
+                os.replace(src_folder, dst_folder)
+            except OSError as e:  # файл модели занят, том на самом деле другой — копируем
+                log.info("Переименовать папку модели не вышло (%s) — копирую", e)
+            else:
+                found = model_path(model, dst)
+                if found is None:
+                    try:
+                        os.replace(dst_folder, src_folder)
+                    except OSError as e:
+                        log.error("Не удалось вернуть модель %s на место: %s", model, e)
+                    raise FetchError(tr("fetch.move_verify_failed", model=model, path=dst))
+                _move_locks(src, dst, name, rename=True)
+                log.info("Модель %s перенесена переименованием: %s", model, found)
+                rep.emit(100.0, tr("fetch.move_done", model=model), force=True)
+                return str(found)
+
+        tmp = dst / (name + _TMP_SUFFIX)
+        _rmtree(tmp)  # след прерванной прошлой попытки
+        created = False
+        done = [0]
+        try:
+            total = _copy_size(src_folder)
+            _check_move_space(model, dst, total)
+
+            def report(n: int) -> None:
+                done[0] += n
+                shown = max(total, done[0])
+                rep.emit(min(done[0] * 100.0 / shown if shown else 0.0, 99.9),
+                         tr("fetch.move_progress_mb", model=model, done=_mb(done[0]),
+                            total=_mb(shown)))
+
+            _copy_model_folder(src_folder, tmp, report)
+            if os.path.lexists(dst_folder):
+                _merge_into(tmp, dst_folder)
+                _rmtree(tmp)
+            else:
+                _replace(tmp, dst_folder)
+                created = True
+        except FetchError:
+            _rmtree(tmp)
+            raise
+        except OSError as e:
+            _rmtree(tmp)
+            log.warning("Не удалось перенести модель %s в %s: %s", model, dst, e)
+            raise FetchError(tr("fetch.move_failed", model=model, path=dst, reason=_reason(e),
+                                advice=_advice(e, tr("fetch.advice_retry")))) from e
+        found = model_path(model, dst)
+        if found is None:
+            if created:
+                _rmtree(dst_folder)
+            raise FetchError(tr("fetch.move_verify_failed", model=model, path=dst))
+        _move_locks(src, dst, name, rename=False)
+        log.info("Модель %s скопирована за %.0f с (%s МБ): %s", model, time.monotonic() - t0,
+                 _mb(done[0]), found)
+        rep.emit(100.0, tr("fetch.move_done", model=model), force=True)
+        return str(found)
+
+
+def _check_move_space(model: str, dst: Path, need_files: int) -> None:
+    try:
+        free = shutil.disk_usage(dst).free
+    except OSError as e:
+        log.debug("Свободное место в %s не узнать: %s", dst, e)
+        return
+    need = need_files + _MODEL_SPACE_MARGIN
+    if free < need:
+        raise FetchError(tr("fetch.move_no_space", model=model, need=_gb(need), free=_gb(free),
+                            path=dst))
+
+
+def remove_model(model: str, cache_dir: str | Path | None) -> bool:
+    """Удалить модель из кэша cache_dir (None — кэш по умолчанию): только её папку
+    models--org--name и .locks/models--org--name, больше ничего. True — удалено (или её там
+    и не было); ошибки — в лог. Модель, заданная своей папкой, не удаляется никогда."""
+    if os.path.isdir(model):
+        log.warning("Модель задана папкой (%s) — не удаляю", model)
+        return False
+    try:
+        name = _repo_folder(repo_id(model))
+    except FetchError as e:
+        log.warning("Удалить модель %s нельзя: %s", model, e)
+        return False
+    cache = _hf_cache_dir(cache_dir)
+    ok = True
+    for p in (cache / name, cache / _LOCKS_DIR / name):
+        if not _rmtree(p):
+            ok = False
+    if ok:
+        log.info("Модель %s удалена из %s", model, cache)
+    return ok
 
 
 # ---------------------------------------------------------------------------

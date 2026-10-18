@@ -171,6 +171,24 @@ const MOCK_CORE = {
   unknownStyle: "api.unknown_style",
   noKey: "api.openrouter_key_missing",
   envEmpty: "api.env_path_missing",
+  noGpu: "eng.no_gpu",
+  // папка модели и подбор модели (model_dir_set, model_recommend)
+  modelDirLabel: "setting.model_dir",
+  modelDirRelative: "cfg.path_not_absolute",
+  modelBusy: "eng.model_dir_busy",
+  progressMove: "fetch.move_progress_mb",
+  modelMoved: "eng.model_moved",
+  moveNoSpace: "fetch.move_no_space",
+  recommendGpu: "rec.reason_gpu_fast",
+  recommendCpu: "rec.reason_cpu_small",
+  recThreads: "rec.threads",
+  recRam: "rec.ram",
+  noteTiny: "rec.note_tiny",
+  noteBase: "rec.note_base",
+  noteSmall: "rec.note_small",
+  noteMedium: "rec.note_medium",
+  noteTurbo: "rec.note_turbo",
+  noteLarge: "rec.note_large",
 };
 const MOCK_FILES = { ru: "mock-data.json", en: "mock-data.en.json" };
 const coreDir = join(root, "..", "core", "rupor", "locales");

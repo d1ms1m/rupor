@@ -6,7 +6,7 @@
 import dataRu from "./mock-data.json";
 import dataEn from "./mock-data.en.json";
 import { navigatorLocale, type Locale } from "../i18n";
-import { titleRuleKey } from "./format";
+import { fmtDecimal, titleRuleKey } from "./format";
 import { BackendError, EventHub, type ArgsTuple, type Backend } from "./hub";
 import type {
   AiBalance,
@@ -33,6 +33,8 @@ import type {
   LearnJournalEntry,
   LearnMode,
   LearnSource,
+  ModelOption,
+  ModelRecommend,
   NoticeEvent,
   RdpWindow,
   Settings,
@@ -60,6 +62,11 @@ export interface MockOptions {
   rdp?: "0" | "none" | null;
   /** ?low_balance=1 — баланс $0.62 и предупреждение «меньше $1». */
   lowBalance?: boolean;
+  /**
+   * ?gpu=0 — видеокарты NVIDIA нет: cuda_check без GPU, model_recommend советует small на
+   * процессоре (для мастера: ?mock=1&first_run=1&gpu=0).
+   */
+  noGpu?: boolean;
   /**
    * ?scene=broadcast|broadcast_none — один раз показать запись с рассылкой (с адресатами /
    * без отмеченных сессий, после неё — уведомление «Не выбраны RDP-сессии»).
@@ -136,6 +143,28 @@ const DATA: Record<Locale, MockData> = { ru: dataRu, en: dataEn as MockData };
 const DAY = 86_400;
 const WORDS_PER_SEC = 2.3;
 
+// Папка моделей: кэш Hugging Face по умолчанию (settings.model_dir = "") и модели Whisper,
+// как их отдаёт ядро в model_recommend (размеры — запасная таблица ядра, МБ).
+const HF_CACHE = "C:\\Users\\Demo\\.cache\\huggingface\\hub";
+const MODEL_TABLE: Omit<ModelOption, "recommended" | "note">[] = [
+  { model: "tiny", repo: "Systran/faster-whisper-tiny", size_mb: 75, quality: 1, speed: 5 },
+  { model: "base", repo: "Systran/faster-whisper-base", size_mb: 145, quality: 2, speed: 5 },
+  { model: "small", repo: "Systran/faster-whisper-small", size_mb: 484, quality: 3, speed: 4 },
+  { model: "medium", repo: "Systran/faster-whisper-medium", size_mb: 1530, quality: 4, speed: 3 },
+  { model: "large-v3-turbo", repo: "mobiuslabsgmbh/faster-whisper-large-v3-turbo", size_mb: 1620, quality: 5, speed: 4 },
+  { model: "large-v3", repo: "Systran/faster-whisper-large-v3", size_mb: 3090, quality: 5, speed: 2 },
+];
+
+/** Ключ папки: регистр, «/» и конечный «\» не важны (как пути Windows). */
+function dirKey(p: string): string {
+  return p.trim().replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+}
+
+/** МБ → ГБ с одним знаком, как в сообщениях ядра о месте на диске («1,6»). */
+function fmtGb(mb: number): string {
+  return fmtDecimal(mb / 1024, 1);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -204,6 +233,7 @@ const DEFAULT_SETTINGS: Settings = {
   input_device: null,
   min_record_ms: 300,
   model: "large-v3-turbo",
+  model_dir: "",
   device: "cuda",
   compute_type: "float16",
   beam_size: 5,
@@ -299,7 +329,11 @@ export class MockBackend implements Backend {
   private balanceCache: { at: number; value: AiBalance } | null = null;
   private balanceSpent = 0;
   private vocabExcluded: Set<string>;
-  private setup = { model_ready: true, cuda_ready: true };
+  private cudaReady = true;
+  /** Какие модели лежат в какой папке (ключ — dirKey). */
+  private stored = new Map<string, Set<string>>();
+  /** Слот «model» ядра: пока модель качается или переносится, второе не начнётся. */
+  private modelJob: "download" | "move" | null = null;
   private micTimer: ReturnType<typeof setInterval> | null = null;
   private testRec: { started: number; timer: ReturnType<typeof setInterval> } | null = null;
   private busy = false;
@@ -320,9 +354,16 @@ export class MockBackend implements Backend {
     if (opts.firstRun) {
       this.settings.first_run_done = false;
       this.settings.ai_enabled = false;
-      this.setup = { model_ready: false, cuda_ready: false };
+      this.cudaReady = false;
       this.keys.openrouter = null;
     }
+    if (opts.noGpu && !opts.firstRun) {
+      this.settings.device = "cpu";
+      this.settings.compute_type = "int8";
+    }
+    // Демо: в кэше Hugging Face лежат все модели; на чистой машине (мастер, ?no_model=1) — ни одной
+    const haveModels = !(opts.firstRun || opts.noModel);
+    this.stored.set(dirKey(HF_CACHE), new Set(haveModels ? MODEL_TABLE.map((m) => m.model) : []));
     this.state = {
       state: "idle",
       paused: false,
@@ -337,7 +378,7 @@ export class MockBackend implements Backend {
       hotkeys: this.hotkeys(),
       ui_language: this.uiLanguage(),
     };
-    if (opts.noModel) this.setup = { ...this.setup, model_ready: false };
+    if (opts.noGpu) this.state.device = "cpu";
     if (opts.firstRun || opts.noModel) {
       // как настоящее ядро на чистой машине: модели нет, ждём setup_download → state=error
       this.state = { ...this.state, state: "error", device: null, model_loaded: false };
@@ -1003,8 +1044,144 @@ export class MockBackend implements Backend {
     });
   }
 
+  /** Папка, где «ядро» ищет модели сейчас. */
+  private modelDir(): string {
+    return this.settings.model_dir || HF_CACHE;
+  }
+
+  private modelReady(): boolean {
+    return this.stored.get(dirKey(this.modelDir()))?.has(this.settings.model) ?? false;
+  }
+
+  private storeModel(dir: string, model: string, present: boolean): void {
+    const set = this.stored.get(dirKey(dir)) ?? new Set<string>();
+    if (present) set.add(model);
+    else set.delete(model);
+    this.stored.set(dirKey(dir), set);
+  }
+
+  /** Как валидатор ядра: строка, полный путь (буква диска или UNC), без «\» в конце. */
+  private checkModelDir(raw: unknown, cmd: string): string {
+    if (typeof raw !== "string") {
+      throw new BackendError(fill(this.tx.badSetting, { key: "model_dir", value: String(raw) }), cmd);
+    }
+    let p = raw.trim().replace(/\//g, "\\");
+    if (!p) return "";
+    if (!/^[A-Za-z]:\\/.test(p) && !/^\\\\[^\\]+\\[^\\]+/.test(p)) {
+      // как ядро: «Папка модели: нужен полный путь…»
+      throw new BackendError(`${this.tx.modelDirLabel}: ${this.tx.modelDirRelative}`, cmd);
+    }
+    p = p.replace(/\\+$/, "");
+    return /^[A-Za-z]:$/.test(p) ? `${p}\\` : p;
+  }
+
+  /** Модель с диска заново (ядро: задание reload) — прежняя работает до готовности новой. */
+  private reloadModel(delayMs: number): void {
+    this.state = { ...this.state, model_loaded: false };
+    this.setState("loading");
+    setTimeout(() => {
+      this.state = {
+        ...this.state,
+        model_loaded: true,
+        device: this.settings.device === "cpu" ? "cpu" : "cuda",
+      };
+      this.setState(this.state.paused ? "paused" : "idle");
+    }, delayMs);
+  }
+
+  /**
+   * Перенос модели в другую папку (model_dir_set move=true): копия с прогрессом, на том же
+   * диске — мгновенно. По окончании, как у ядра, — новый model_dir (событие settings),
+   * progress done, перезагрузка модели оттуда и notice. В папке с «full» в имени демо-ядру
+   * «не хватает места» — ошибка переноса до начала копирования (ядро проверяет место заранее).
+   */
+  private moveModel(path: string, from: string, to: string): void {
+    this.modelJob = "move";
+    const model = this.settings.model;
+    const total = MODEL_TABLE.find((m) => m.model === model)?.size_mb ?? 1620;
+    const sameDisk = from.slice(0, 2).toLowerCase() === to.slice(0, 2).toLowerCase();
+    const finish = () => {
+      this.modelJob = null;
+      this.storeModel(from, model, false);
+      this.storeModel(to, model, true);
+      this.applySettings({ model_dir: path });
+      this.hub.emit("progress", { what: "model", pct: 100, text: this.tx.progressDone, done: true, error: null });
+      this.hub.emit("notice", { text: fill(this.tx.modelMoved, { path: to }), level: "info", action: null, toast: true, data: null });
+    };
+    if (/full/i.test(to)) {
+      setTimeout(() => {
+        this.modelJob = null;
+        const need = fmtGb(total + 64);
+        const error = fill(this.tx.moveNoSpace, { model, need, free: fmtGb(total / 3), path: to });
+        this.hub.emit("progress", { what: "model", pct: 0, text: error, done: true, error });
+      }, 400);
+      return;
+    }
+    if (sameDisk) {
+      setTimeout(finish, 300);
+      return;
+    }
+    let pct = 0;
+    const timer = setInterval(() => {
+      pct = Math.min(100, pct + 3 + Math.random() * 6);
+      if (pct >= 100) {
+        clearInterval(timer);
+        finish();
+        return;
+      }
+      this.hub.emit("progress", {
+        what: "model",
+        pct: Math.round(pct),
+        text: fill(this.tx.progressMove, { model, done: Math.round((total * pct) / 100), total }),
+        done: false,
+        error: null,
+      });
+    }, 140);
+  }
+
+  private recommend(): ModelRecommend {
+    const gpu = !this.opts.noGpu;
+    const rec: ModelRecommend["recommended"] = gpu
+      ? { model: "large-v3-turbo", device: "cuda", compute_type: "float16" }
+      : { model: "small", device: "cpu", compute_type: "int8" };
+    const threads = gpu ? 16 : 8;
+    const ram = gpu ? 31.9 : 15.9;
+    const tx = this.tx;
+    const notes: Record<string, string> = {
+      tiny: tx.noteTiny,
+      base: tx.noteBase,
+      small: tx.noteSmall,
+      medium: tx.noteMedium,
+      "large-v3-turbo": tx.noteTurbo,
+      "large-v3": tx.noteLarge,
+    };
+    const lang = this.state.ui_language;
+    return {
+      gpu_name: gpu ? "NVIDIA GeForce RTX 3060 Ti" : null,
+      vram_mb: gpu ? 8192 : null,
+      cuda_ok: gpu,
+      ram_gb: ram,
+      cpu_threads: threads,
+      recommended: rec,
+      reason: gpu
+        ? fill(this.tx.recommendGpu, { gpu: "RTX 3060 Ti", vram: 8 })
+        : fill(tx.recommendCpu, {
+            threads: fill(pluralForm(tx.recThreads, threads, lang), { n: threads }),
+            ram: fill(tx.recRam, { gb: Math.round(ram) }),
+          }),
+      options: MODEL_TABLE.map((m) => ({ ...m, recommended: m.model === rec.model, note: notes[m.model] ?? "" })),
+    };
+  }
+
   private progress(what: "model" | "cuda"): void {
-    const total = what === "model" ? 1620 : 1180;
+    if (what === "model") {
+      // как ядро: слот «model» занят — вторая загрузка не начинается
+      if (this.modelJob) return;
+      this.modelJob = "download";
+    }
+    const model = this.settings.model;
+    const dir = this.modelDir();
+    const total = what === "model" ? (MODEL_TABLE.find((m) => m.model === model)?.size_mb ?? 1620) : 1180;
     const tpl = what === "model" ? this.tx.progressModel : this.tx.progressCuda;
     let pct = 0;
     const timer = setInterval(() => {
@@ -1022,16 +1199,20 @@ export class MockBackend implements Backend {
       if (done) {
         clearInterval(timer);
         if (what === "model") {
-          this.setup.model_ready = true;
+          this.modelJob = null;
+          this.storeModel(dir, model, true);
           if (!this.state.model_loaded) {
             // модель скачана — ядро загружает её и становится готовым
             this.setState("loading");
             setTimeout(() => {
-              this.state = { ...this.state, device: "cuda", model_loaded: true };
+              this.state = { ...this.state, device: this.settings.device === "cpu" ? "cpu" : "cuda", model_loaded: true };
               this.setState(this.state.paused ? "paused" : "idle");
             }, 900);
+          } else if (this.settings.first_run_done) {
+            // скачана в другую папку, пока работала прежняя, — подменить её
+            this.reloadModel(900);
           }
-        } else this.setup.cuda_ready = true;
+        } else this.cudaReady = true;
       }
     }, 140);
   }
@@ -1074,24 +1255,20 @@ export class MockBackend implements Backend {
   private applySettings(patch: SettingsPatch): Settings {
     const prev = this.settings;
     const next: Settings = { ...prev, ...patch };
+    const dirChanged = dirKey(prev.model_dir || HF_CACHE) !== dirKey(next.model_dir || HF_CACHE);
     this.settings = next;
     this.hub.emit("settings", structuredClone(next));
     this.syncState();
-    if (
+    const modelChanged =
       patch.model !== undefined && patch.model !== prev.model ||
       patch.device !== undefined && patch.device !== prev.device ||
-      patch.compute_type !== undefined && patch.compute_type !== prev.compute_type
-    ) {
-      this.state = { ...this.state, model_loaded: false };
-      this.setState("loading");
-      setTimeout(() => {
-        this.state = {
-          ...this.state,
-          model_loaded: true,
-          device: next.device === "cpu" ? "cpu" : "cuda",
-        };
-        this.setState(this.state.paused ? "paused" : "idle");
-      }, 1800);
+      patch.compute_type !== undefined && patch.compute_type !== prev.compute_type ||
+      dirChanged;
+    // Как ядро: модель на месте — перезагрузить, нет — до первого запуска ждать мастера
+    // (setup_download), после — качать сюда, пока работает прежняя
+    if (modelChanged && this.state.model_loaded) {
+      if (this.modelReady()) this.reloadModel(1800);
+      else if (next.first_run_done) this.progress("model");
     }
     return structuredClone(next);
   }
@@ -1111,6 +1288,9 @@ export class MockBackend implements Backend {
         }
         if (a.patch.dictation_language !== undefined && !["auto", "ru", "en"].includes(a.patch.dictation_language)) {
           throw bad("dictation_language", a.patch.dictation_language);
+        }
+        if (a.patch.model_dir !== undefined) {
+          return this.applySettings({ ...a.patch, model_dir: this.checkModelDir(a.patch.model_dir, cmd) });
         }
         return this.applySettings(a.patch);
       }
@@ -1153,20 +1333,40 @@ export class MockBackend implements Backend {
         }));
       }
       case "cuda_check":
-        return sleep(500).then(() => ({
-          ok: true,
-          device: "cuda",
-          gpu_name: "NVIDIA GeForce RTX 3060 Ti",
-          vram_total_mb: 8192,
-          error: null,
-        }));
+        return sleep(500).then(() =>
+          this.opts.noGpu
+            ? { ok: false, device: "cpu", gpu_name: null, vram_total_mb: null, error: this.tx.noGpu }
+            : { ok: true, device: "cuda", gpu_name: "NVIDIA GeForce RTX 3060 Ti", vram_total_mb: 8192, error: null },
+        );
       case "setup_status":
-        return { ...this.setup, first_run_done: this.settings.first_run_done };
+        return {
+          model_ready: this.modelReady(),
+          cuda_ready: this.cudaReady,
+          first_run_done: this.settings.first_run_done,
+          model_dir: this.modelDir(),
+          model_dir_default: HF_CACHE,
+        };
       case "setup_download": {
         const a = rawArgs as CommandArgs<"setup_download">;
         this.progress(a.what);
         return null;
       }
+      case "model_dir_set": {
+        const a = rawArgs as CommandArgs<"model_dir_set">;
+        const path = this.checkModelDir(a.path, cmd);
+        const from = this.modelDir();
+        const to = path || HF_CACHE;
+        if (dirKey(from) === dirKey(to)) return { ok: true, moving: false };
+        if (this.modelJob) throw new BackendError(this.tx.modelBusy, cmd);
+        if (a.move && this.modelReady()) {
+          this.moveModel(path, from, to);
+          return { ok: true, moving: true };
+        }
+        this.applySettings({ model_dir: path });
+        return { ok: true, moving: false };
+      }
+      case "model_recommend":
+        return sleep(700).then(() => this.recommend());
       case "history_list": {
         const a = (rawArgs ?? {}) as CommandArgs<"history_list">;
         const q = (a.query ?? "").trim().toLowerCase();

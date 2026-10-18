@@ -7,6 +7,8 @@ import {
   CircleAlert,
   Cpu,
   Download,
+  FolderDown,
+  Gauge,
   HardDrive,
   Keyboard,
   Languages,
@@ -21,25 +23,36 @@ import {
   Timer,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { HotkeyCapture } from "../components/HotkeyCapture";
 import { KeyManager } from "../components/KeyManager";
 import { LevelBar, LiveWave } from "../components/Level";
 import { Logo } from "../components/Logo";
+import { ModelFolder } from "../components/ModelFolder";
 import { Button, IconButton, Segmented, Switch } from "../components/ui/controls";
 import { Badge, KeyCombo, ProgressBar, Spinner } from "../components/ui/display";
 import { Select, type SelectOption } from "../components/ui/select";
 import { useToast } from "../components/ui/toast";
-import { getLocale, languageName, LOCALES, NATIVE_NAMES, systemLocale, t, tIn, type Locale, type TKey } from "../i18n";
+import { getLocale, languageName, LOCALES, NATIVE_NAMES, systemLocale, t, tIn, tp, type Locale, type TKey } from "../i18n";
 import { cached, invalidate } from "../lib/cache";
 import { cn } from "../lib/cn";
-import { fmtMs, fmtSeconds } from "../lib/format";
+import { fmtDecimal, fmtMb, fmtMs, fmtSeconds } from "../lib/format";
 import { useEvent, useLoad, useMicMonitor } from "../lib/hooks";
 import { errorText } from "../lib/hub";
 import { keyLabel } from "../lib/keys";
 import { useCore } from "../lib/store";
 import { autostartEnabled, inTauri, setAutostart } from "../lib/tauri";
-import type { DictationLanguage, DownloadWhat, ProgressEvent, Settings, SettingsPatch, TestRecordResult } from "../lib/types";
+import type {
+  DictationLanguage,
+  DownloadWhat,
+  ModelOption,
+  ModelRating,
+  ModelRecommend,
+  ProgressEvent,
+  Settings,
+  SettingsPatch,
+  TestRecordResult,
+} from "../lib/types";
 import { call } from "../lib/ws";
 
 const STEPS = ["language", "welcome", "mic", "model", "test", "hotkeys", "ai", "autostart", "done"] as const;
@@ -50,6 +63,8 @@ export function Wizard({ onDone }: { onDone: () => void }) {
   const [i, setI] = useState(0);
   const [dir, setDir] = useState(1);
   const [canNext, setCanNext] = useState(true);
+  // Модель уже выбрана в этом проходе мастера (рекомендацию не подставлять повторно)
+  const modelPicked = useRef(false);
   const step: Step = STEPS[i] ?? "language";
 
   const go = (delta: number) => {
@@ -120,7 +135,7 @@ export function Wizard({ onDone }: { onDone: () => void }) {
             {step === "language" && <LanguageStep s={settings} set={updateSettings} onNext={() => go(1)} />}
             {step === "welcome" && <Welcome onStart={() => go(1)} />}
             {step === "mic" && <MicStep s={settings} set={updateSettings} />}
-            {step === "model" && <ModelStep setCanNext={setCanNext} />}
+            {step === "model" && <ModelStep s={settings} set={updateSettings} setCanNext={setCanNext} picked={modelPicked} />}
             {step === "test" && <TestStep />}
             {step === "hotkeys" && <HotkeysStep s={settings} set={updateSettings} />}
             {step === "ai" && <AiStep s={settings} set={updateSettings} />}
@@ -169,8 +184,26 @@ function StepHead({ icon, title, text }: { icon: ReactNode; title: TKey; text: T
   );
 }
 
-function Panel({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("rounded-2xl border border-line bg-surface p-5 shadow-card", className)}>{children}</div>;
+/**
+ * Карточка шага. padded={false} — без внутреннего отступа: строки со своими px-5 и
+ * разделителями во всю ширину (класс p-0 не помог бы — p-5 в CSS идёт позже и побеждает).
+ */
+function Panel({
+  children,
+  className,
+  padded = true,
+  ...rest
+}: {
+  children: ReactNode;
+  className?: string;
+  padded?: boolean;
+  "data-testid"?: string;
+}) {
+  return (
+    <div className={cn("rounded-2xl border border-line bg-surface shadow-card", padded && "p-5", className)} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 // ——— 1. Язык ———
@@ -383,11 +416,24 @@ interface Dl {
   running: boolean;
 }
 
-function ModelStep({ setCanNext }: { setCanNext: (v: boolean) => void }) {
+function ModelStep({
+  s,
+  set,
+  setCanNext,
+  picked,
+}: StepProps & { setCanNext: (v: boolean) => void; picked: MutableRefObject<boolean> }) {
   const toast = useToast();
   const { state } = useCore();
   const cuda = useLoad(() => cached("cuda_check", 10 * 60_000, () => call("cuda_check", undefined, { timeoutMs: 60_000 })));
-  const setup = useLoad(() => call("setup_status"));
+  // Подбор по мощности компьютера: размеры моделей ядро спрашивает у Hugging Face (~5 с).
+  // reason и note — на языке интерфейса: у каждого языка свой кэш (вернулись к шагу языка)
+  const rec = useLoad(() =>
+    cached(`model_recommend:${getLocale()}`, 10 * 60_000, () =>
+      call("model_recommend", undefined, { timeoutMs: 30_000 }),
+    ),
+  );
+  // model_ready — про settings.model в папке model_dir: сменились — перечитать
+  const setup = useLoad(() => call("setup_status"), [s.model, s.model_dir]);
   const [dl, setDl] = useState<Record<DownloadWhat, Dl | null>>({ model: null, cuda: null });
 
   // Проверка CUDA в кэше на 10 минут — после загрузки библиотек и смены устройства
@@ -425,6 +471,32 @@ function ModelStep({ setCanNext }: { setCanNext: (v: boolean) => void }) {
   const modelReady = Boolean(setup.data?.model_ready);
   useEffect(() => setCanNext(modelReady), [modelReady, setCanNext]);
 
+  /** Модель из списка: устройство и точность — по рекомендации (их решает железо). */
+  const choose = (model: string) => {
+    picked.current = true;
+    const r = rec.data?.recommended;
+    const patch: SettingsPatch = { model };
+    if (r) {
+      patch.device = r.device;
+      patch.compute_type = r.compute_type;
+    }
+    if (model === s.model && (patch.device ?? s.device) === s.device && (patch.compute_type ?? s.compute_type) === s.compute_type) {
+      return;
+    }
+    // ошибка загрузки прежней модели к новой не относится
+    setDl((d) => ({ ...d, model: d.model?.running ? d.model : null }));
+    void set(patch);
+  };
+
+  // Рекомендацию подставляем сами, когда шаг открылся впервые за проход мастера и модели
+  // ещё нет на диске (первая установка). Уже скачанную модель молча не меняем: мастер можно
+  // запустить и из настроек — иначе он начал бы качать другую.
+  useEffect(() => {
+    if (picked.current || !rec.data || !setup.data) return;
+    picked.current = true;
+    if (!setup.data.model_ready) choose(rec.data.recommended.model);
+  }, [rec.data, setup.data]);
+
   const start = async (what: DownloadWhat) => {
     setDl((d) => ({ ...d, [what]: { pct: 0, text: t("wizard.model.starting"), done: false, error: null, running: true } }));
     try {
@@ -439,11 +511,34 @@ function ModelStep({ setCanNext }: { setCanNext: (v: boolean) => void }) {
   const gpuOk = Boolean(c?.ok && c.device === "cuda");
   // Видеокарты NVIDIA нет — библиотеки CUDA (~1 ГБ) качать незачем.
   const noGpu = Boolean(c && !c.gpu_name && !cuda.loading);
+  // Пока модель качается или переносится, ни модель, ни папку не меняем
+  const modelBusy = Boolean(dl.model?.running);
+  const size = rec.data?.options.find((o) => o.model === s.model)?.size_mb;
 
   return (
     <div>
       <StepHead icon={<Zap />} title="wizard.model.title" text="wizard.model.text" />
-      <Panel className="p-0">
+      <ModelChoice
+        rec={rec.data}
+        loading={rec.loading && !rec.data}
+        error={rec.data ? null : rec.error}
+        current={s.model}
+        disabled={modelBusy}
+        onChoose={choose}
+      />
+      <Panel className="mt-3">
+        <div className="mb-3 flex items-start gap-3.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted [&>svg]:size-5">
+            <FolderDown />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] font-semibold text-fg">{t("wizard.model.folderTitle")}</div>
+            <div className="text-[12.5px] text-muted">{t("wizard.model.folderText")}</div>
+          </div>
+        </div>
+        <ModelFolder disabled={modelBusy} showDownloads={false} onChanged={setup.reload} />
+      </Panel>
+      <Panel padded={false} className="mt-3">
         <div className="flex items-center gap-3.5 border-b border-line px-5 py-4">
           <span
             className={cn(
@@ -487,8 +582,8 @@ function ModelStep({ setCanNext }: { setCanNext: (v: boolean) => void }) {
         />
         <DownloadRow
           icon={<Download />}
-          title={t("wizard.model.model")}
-          text={t("wizard.model.modelText")}
+          title={t("wizard.model.model", { model: s.model })}
+          text={size ? t("wizard.model.modelText", { size: fmtMb(size) }) : t("wizard.model.modelTextNoSize")}
           ready={modelReady}
           loading={setup.loading && !setup.data}
           dl={dl.model}
@@ -580,6 +675,127 @@ function DownloadRow({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/**
+ * Рекомендация под этот компьютер (model_recommend) и выбор модели. Подбор не удался — мастер
+ * работает дальше с моделью из настроек: показываем её и причину.
+ */
+function ModelChoice({
+  rec,
+  loading,
+  error,
+  current,
+  disabled,
+  onChoose,
+}: {
+  rec: ModelRecommend | undefined;
+  loading: boolean;
+  error: string | null;
+  current: string;
+  disabled: boolean;
+  onChoose: (model: string) => void;
+}) {
+  const hardware = rec
+    ? [tp("units.threads", rec.cpu_threads), t("wizard.model.ram", { n: fmtDecimal(rec.ram_gb, 0) })].join(" · ")
+    : null;
+  return (
+    <Panel padded={false} data-testid="wizard-model-choice">
+      <div className="flex items-start gap-3.5 px-5 py-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text [&>svg]:size-5">
+          <Gauge />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] font-semibold text-fg">
+            {loading
+              ? t("wizard.model.recommendLoading")
+              : rec
+                ? t("wizard.model.recommend", { model: rec.recommended.model })
+                : t("wizard.model.currentModel", { model: current })}
+          </div>
+          {rec ? (
+            <>
+              <div className="text-[12.5px] text-muted">{rec.reason}</div>
+              {hardware && <div className="mt-0.5 text-[12px] text-subtle">{hardware}</div>}
+            </>
+          ) : error && !loading ? (
+            <div className="text-[12.5px] text-danger">{t("wizard.model.recommendFailed", { error })}</div>
+          ) : null}
+        </div>
+        {loading && <Spinner />}
+      </div>
+      {rec && rec.options.length > 0 && (
+        <div role="radiogroup" aria-label={t("wizard.model.chooseTitle")} className="space-y-1 border-t border-line p-2">
+          {rec.options.map((o) => (
+            <ModelOptionRow key={o.model} o={o} active={o.model === current} disabled={disabled} onChoose={onChoose} />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ModelOptionRow({
+  o,
+  active,
+  disabled,
+  onChoose,
+}: {
+  o: ModelOption;
+  active: boolean;
+  disabled: boolean;
+  onChoose: (model: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={`${o.model}: ${o.note}`}
+      disabled={disabled}
+      onClick={() => onChoose(o.model)}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors disabled:opacity-60",
+        active ? "bg-accent-soft" : "hover:bg-surface-2",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-4 shrink-0 items-center justify-center rounded-full border-2",
+          active ? "border-accent" : "border-line-strong",
+        )}
+      >
+        {active && <motion.span layoutId="wizard-model-radio" className="size-1.5 rounded-full bg-accent" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="font-mono text-[13px] font-semibold text-fg">{o.model}</span>
+          {o.recommended && <Badge tone="accent">{t("wizard.model.recommendedBadge")}</Badge>}
+        </span>
+        <span className="block truncate text-[12px] text-muted" title={o.note}>
+          {o.note}
+        </span>
+      </span>
+      <Rating label={t("wizard.model.quality")} n={o.quality} />
+      <Rating label={t("wizard.model.speed")} n={o.speed} />
+      <span className="tabular w-14 shrink-0 text-right text-[12.5px] text-muted">{fmtMb(o.size_mb)}</span>
+    </button>
+  );
+}
+
+/** Оценка 1–5 полосками (качество, скорость). */
+function Rating({ label, n }: { label: string; n: ModelRating }) {
+  const text = t("wizard.model.rating", { label, n });
+  return (
+    <span className="flex shrink-0 flex-col items-end gap-1" title={text} aria-label={text} role="img">
+      <span className="text-[10.5px] leading-none text-subtle">{label}</span>
+      <span className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((k) => (
+          <span key={k} className={cn("h-1.5 w-2.5 rounded-full", k <= n ? "bg-accent" : "bg-surface-3")} />
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -710,7 +926,7 @@ function HotkeysStep({ s, set }: StepProps) {
   return (
     <div>
       <StepHead icon={<Keyboard />} title="wizard.hotkeys.title" text="wizard.hotkeys.text" />
-      <Panel className="p-0">
+      <Panel padded={false}>
         {rows.map((r) => (
           <div key={r.k} className="flex items-center gap-4 border-b border-line px-5 py-3.5 last:border-b-0">
             <div className="min-w-0 flex-1">

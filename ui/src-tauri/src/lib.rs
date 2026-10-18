@@ -158,6 +158,8 @@ pub fn run() {
             show_main(app, None);
         }))
         .plugin(tauri_plugin_autostart::Builder::new().args(["--autostart"]).build())
+        // Выбор папки моделей («Обзор…»); разрешено только окну main (dialog:allow-open)
+        .plugin(tauri_plugin_dialog::init())
         .manage(supervisor)
         .invoke_handler(tauri::generate_handler![
             commands::backend_info,

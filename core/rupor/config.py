@@ -16,6 +16,7 @@ import copy
 import json
 import logging
 import math
+import ntpath
 import os
 import re
 import threading
@@ -68,7 +69,9 @@ HOTKEY_FIELDS = ("ptt_key", "broadcast_modifier", "command_modifier", "cancel_ke
                  "tap_max_ms", "double_tap_ms", "insert_last_hotkey", "copy_last_hotkey",
                  "mouse_button")
 KEY_FIELDS = ("ptt_key", "broadcast_modifier", "command_modifier", "cancel_key")
-MODEL_FIELDS = ("model", "device", "compute_type")
+# Смена любого из них — перезагрузка модели в фоне (model_dir: модель ищется в новой папке,
+# нет там — качается туда, прежняя распознаёт, пока новая не готова)
+MODEL_FIELDS = ("model", "device", "compute_type", "model_dir")
 
 
 def app_dir() -> Path:
@@ -106,6 +109,10 @@ class Settings:
     model: str = "large-v3-turbo"
     device: str = "cuda"
     compute_type: str = "float16"
+    # Папка моделей Whisper в формате кэша HuggingFace (models--<org>--<имя>/blobs|snapshots|
+    # refs) — как download_root у faster-whisper, её можно указать и другим программам.
+    # "" — кэш HuggingFace по умолчанию (обычно %USERPROFILE%\.cache\huggingface\hub)
+    model_dir: str = ""
     beam_size: int = 5
     en_threshold: float = 0.8
     # auto | ru | en (asr.Recognizer читает через getattr): auto — язык интерфейса, другой —
@@ -362,6 +369,38 @@ def _url(v: Any) -> str:
     return s.rstrip("/")
 
 
+MODEL_DIR_MAX = 1000
+_PATH_BAD_CHARS = frozenset('<>:"|?*')
+_UNSET_VAR_RE = re.compile(r"%([^%\\/]+)%")
+
+
+def normalize_model_dir(v: Any) -> str:
+    """Папка моделей: "" — кэш HuggingFace по умолчанию; иначе полный путь (буква диска
+    или UNC). %ПЕРЕМЕННЫЕ% и ~ раскрываются, кавычки вокруг вставленного пути снимаются,
+    путь нормализуется (ntpath.normpath); кириллица и пробелы допустимы."""
+    if not isinstance(v, str):
+        raise ValueError(tr("cfg.expect_str"))
+    s = v.strip()
+    if len(s) >= 2 and s[0] == s[-1] == '"':   # «Копировать как путь» в проводнике
+        s = s[1:-1].strip()
+    if not s:
+        return ""
+    s = ntpath.expanduser(ntpath.expandvars(s))
+    unset = _UNSET_VAR_RE.search(s)
+    if unset:
+        raise ValueError(tr("cfg.path_unknown_var", name=unset.group(1)))
+    drive, rest = ntpath.splitdrive(s)
+    unc = drive.startswith(("\\\\", "//"))
+    if not drive or not (unc or rest[:1] in ("\\", "/")):
+        raise ValueError(tr("cfg.path_not_absolute"))
+    if any(c in _PATH_BAD_CHARS or ord(c) < 32 for c in rest):
+        raise ValueError(tr("cfg.path_bad_chars"))
+    out = ntpath.normpath(s)
+    if len(out) > MODEL_DIR_MAX:
+        raise ValueError(tr("cfg.too_long", max=MODEL_DIR_MAX))
+    return out
+
+
 def _mode_or_none(v: Any) -> str | None:
     if v is None or v == "":
         return None
@@ -517,6 +556,7 @@ _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "model": _text(max_len=300),
     "device": _choice(DEVICES),
     "compute_type": _choice(COMPUTE_TYPES),
+    "model_dir": normalize_model_dir,
     "beam_size": _int(1, 10),
     "en_threshold": _float(0.0, 1.0),
     "dictation_language": _choice(DICTATION_LANGUAGES),

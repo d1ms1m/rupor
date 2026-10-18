@@ -6,6 +6,41 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-18
+
+### Added
+
+- **Choose where the speech model is stored.** The model no longer has to live in the shared
+  Hugging Face cache on the system drive: pick any folder (for example
+  `D:\Models\whisper-models`) in the setup wizard or in Settings → Dictation → Recognition →
+  *Model folder* (`model_dir`; empty — the Hugging Face cache as before, so existing installs
+  keep working). The folder uses the Hugging Face cache layout, the same as faster-whisper's
+  `download_root`, so other faster-whisper programs can share it. A model that is already
+  downloaded can be moved there: instantly on the same drive, or copied with a progress bar to
+  another drive (relative symlinks are kept; without the right to create them the files are
+  written in place, without a second copy), with a free-space check, into a temporary folder
+  that is renamed only when the copy is complete; the old copy is deleted afterwards. Dictation
+  keeps working on the loaded model during the move; if the move fails, nothing changes. Without
+  moving, the model is downloaded into the new folder unless it is already there. Core: new
+  command `model_dir_set`, new `setup_status` fields `model_dir` and `model_dir_default`.
+- **The setup wizard suggests a model for your computer.** It looks at the NVIDIA graphics card
+  and its memory, RAM and processor threads (`model_recommend`): `large-v3-turbo` on a card
+  with 4 GB or more, the same model in a memory-saving mode (int8) on 2–4 GB, `small` on smaller
+  cards or a strong processor, `base` on modest computers — with a reason in plain words
+  ("RTX 3060 Ti graphics card with 8 GB — the best model for Russian and English runs
+  fast"). The other models (tiny … large-v3) are listed with their exact size from Hugging Face
+  (a built-in table if there is no network), accuracy and speed; the suggestion is picked for
+  you on a fresh install, and a model that is already downloaded is never swapped silently.
+  Settings → Dictation → *Model* now also offers `base` and `tiny`.
+- **Pick the folder with the system dialog.** *Browse…* next to the model folder opens the
+  Windows folder picker (Tauri dialog plugin, allowed for the main window only); a path can also
+  be pasted, including one copied with Explorer's *Copy as path* (the quotes are dropped).
+
+### Fixed
+
+- **Setup wizard cards without doubled padding.** The cards on the *GPU and model* and
+  *Shortcuts* steps had extra space inside around their rows.
+
 ## [0.4.1] — 2026-10-14
 
 ### Added
@@ -118,6 +153,7 @@ First public release.
 - Tray icon, start with Windows, light and dark themes, first-run wizard; a per-user NSIS
   installer without administrator rights.
 
+[0.4.2]: https://github.com/listapad2024/rupor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/listapad2024/rupor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/listapad2024/rupor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/listapad2024/rupor/releases/tag/v0.3.0

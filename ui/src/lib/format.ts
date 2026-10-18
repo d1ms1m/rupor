@@ -132,6 +132,15 @@ export function fmtTokens(n: number): string {
   return n < 10_000 ? formatNumber(Math.round(n)) : numFmt("compact", { notation: "compact" }).format(n);
 }
 
+/**
+ * Размер файлов в МБ по 10⁶ байт (как на Hugging Face и в model_recommend.size_mb): 484 →
+ * «484 МБ», 1620 → «1,6 ГБ» / "1.6 GB", 3090 → «3,1 ГБ».
+ */
+export function fmtMb(mb: number): string {
+  if (mb < 1000) return t("units.mb", { n: formatNumber(Math.max(1, Math.round(mb))) });
+  return t("units.gb", { n: fmtDecimal(mb / 1000) });
+}
+
 /** «только что», «5 мин назад», «2 ч назад», иначе дата. */
 export function fmtAgo(tsSec: number, nowMs = Date.now()): string {
   const sec = Math.max(0, nowMs / 1000 - tsSec);

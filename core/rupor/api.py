@@ -109,6 +109,8 @@ class Api:
             "cuda_check": lambda a: self.e.cuda_check(),
             "setup_status": lambda a: self.e.setup_status(),
             "setup_download": self._setup_download,
+            "model_dir_set": self._model_dir_set,
+            "model_recommend": lambda a: self.e.model_recommend(),
             "history_list": self._history_list,
             "history_delete": self._history_delete,
             "history_clear": self._history_clear,
@@ -214,6 +216,13 @@ class Api:
             raise ApiError(tr("err.what_download"))
         self.e.setup_download(what)
         return None
+
+    def _model_dir_set(self, a: dict[str, Any]) -> dict[str, Any]:
+        path = _str(a, "path")
+        move = a.get("move", False)
+        if not isinstance(move, bool):
+            raise ApiError(tr("api.arg_bool", name="move"))
+        return self.e.model_dir_set(path, move)
 
     # ---------- история ----------
 

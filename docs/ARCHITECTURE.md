@@ -63,7 +63,8 @@ URL: `ws://127.0.0.1:<port>/?token=<token>`. Без верного токена 
 
 Команды одного соединения выполняются **по порядку** (например, `mic_monitor` false→true,
 быстрые `set_settings` от ползунка). Долгие (`ai_test`, `ai_key_check`, `ai_balance`,
-`test_record_stop`, `cuda_check`) тоже ждут предыдущие команды, но следующие команды их не ждут.
+`test_record_stop`, `cuda_check`, `model_recommend`) тоже ждут предыдущие команды, но следующие
+команды их не ждут.
 Команды, которые читают и меняют настройки (`rdp_toggle`, `app_rule_*`, `title_rule_*`), делают
 это атомарно под замком настроек.
 
@@ -73,7 +74,7 @@ URL: `ws://127.0.0.1:<port>/?token=<token>`. Без верного токена 
 |---|---|---|
 | `get_state` | — | `State` (см. ниже) |
 | `get_settings` | — | объект настроек целиком (как `settings.json`) |
-| `set_settings` | `{patch: {...}}` | новый объект настроек. Валидируется; хоткеи, микрофон, режимы применяются сразу без перезапуска. Смена `model`/`device`/`compute_type` → перезагрузка модели в фоне; если новой модели нет на диске, прежняя распознаёт, пока новая качается (не скачалась — остаётся прежняя, notice). Файл не записался — в памяти тоже ничего не меняется (ошибка). Смена хоткеев или микрофона во время записи останавливает её с распознаванием (notice) |
+| `set_settings` | `{patch: {...}}` | новый объект настроек. Валидируется; хоткеи, микрофон, режимы применяются сразу без перезапуска. Смена `model`/`device`/`compute_type`/`model_dir` → перезагрузка модели в фоне; если новой модели нет на диске (в папке `model_dir`), прежняя распознаёт, пока новая качается (не скачалась — остаётся прежняя, notice). `model_dir` здесь только меняет папку, без переноса (перенос — `model_dir_set`). Файл не записался — в памяти тоже ничего не меняется (ошибка). Смена хоткеев или микрофона во время записи останавливает её с распознаванием (notice) |
 | `pause` | `{on: bool}` | `State` |
 | `quit` | — | `null`; ядро завершается через 200 мс |
 | `list_devices` | — | `[{index, name, default: bool}]` |
@@ -81,8 +82,10 @@ URL: `ws://127.0.0.1:<port>/?token=<token>`. Без верного токена 
 | `test_record_start` | — | `null`; запись без вставки (мастер, «проверить распознавание»). Не дольше 60 с; отменяется, если отключились все клиенты. Пока она идёт, диктовка не начинается (notice warn) |
 | `test_record_stop` | — | `{text, language, audio_s, asr_ms}` |
 | `cuda_check` | — | `{ok, device: "cuda"\|"cpu", gpu_name, vram_total_mb, error}` |
-| `setup_status` | — | `{model_ready, cuda_ready, first_run_done}` |
-| `setup_download` | `{what: "model"\|"cuda"}` | `null`; прогресс событиями `progress` |
+| `setup_status` | — | `{model_ready, cuda_ready, first_run_done, model_dir, model_dir_default}` — `model_ready`: модель `settings.model` целиком лежит в папке моделей; `model_dir` — полный путь папки, где Рупор ищет и куда качает модель сейчас (`settings.model_dir` или, если он пуст, кэш HuggingFace по умолчанию); `model_dir_default` — кэш HuggingFace по умолчанию (`HF_HUB_CACHE`, обычно `%USERPROFILE%\.cache\huggingface\hub`) |
+| `setup_download` | `{what: "model"\|"cuda"}` | `null`; прогресс событиями `progress`. Модель качается в папку моделей (`model_dir`) |
+| `model_dir_set` | `{path: string, move?: bool=false}` | `{ok: true, moving: bool}` сразу — сменить папку моделей (см. «Папка модели и подбор модели»). `path` проверяется как настройка `model_dir` (`""` — кэш по умолчанию; относительный путь — ошибка «Папка модели: нужен полный путь…»), папка создаётся и проверяется запись в неё (нельзя — ошибка «Не удалось создать папку…» / «В папку … нельзя записывать…»). Та же папка, что сейчас, — ничего не делает (`moving: false`). `move=true` и модель есть в нынешней папке — `moving: true`, перенос в фоне: события `progress` `what: "model"` (как у загрузки), затем `settings` с новым `model_dir`, перезагрузка модели из новой папки, удаление старой копии и `notice` «Модель перенесена в …» (info, toast) или «Старую копию удалить не удалось: …» (warn). Ошибка переноса — `progress` с `done: true` и `error`, настройки и модель прежние. Иначе (`move=false` или переносить нечего) — как `set_settings {model_dir}`: модель есть в новой папке — перезагрузка оттуда, нет — качается туда. Во время переноса распознавание работает на загруженной модели; повторный `model_dir_set` — ошибка «Модель сейчас переносится или скачивается…» |
+| `model_recommend` | — | `ModelRecommend` — какую модель предложить в мастере первого запуска по мощности компьютера (видеокарта, память, потоки процессора) и модели на выбор с размерами с Hugging Face. Не дольше ≈5 с: размеры, которые не успели прийти (нет сети), — запасные |
 | `history_list` | `{query?: str, limit?: int=50, offset?: int=0}` | `{items: [HistoryItem], total: int}` |
 | `history_delete` | `{id}` | `null` |
 | `history_clear` | `{period: "day"\|"week"\|"month"\|"all"}` | `{deleted: int}` — удалить записи **за** последний период («за день» = последние 24 ч) |
@@ -192,6 +195,23 @@ type AiBalance = {
                                 // «OpenRouter не используется (…) — баланс не проверяется»,
                                 // ошибка сети/ключа; при смене языка кэш с ошибкой сбрасывается
 };
+type ModelRecommend = {
+  gpu_name: string | null;      // первая видеокарта NVIDIA (NVML), null — нет
+  vram_mb: number | null;       // её видеопамять, МБ; null — не определилась
+  cuda_ok: boolean;             // CUDA (CTranslate2) видит видеокарту
+  ram_gb: number;               // оперативная память, ГБ (0 — не определилась)
+  cpu_threads: number;          // потоков процессора
+  recommended: { model: string; device: "cuda" | "cpu"; compute_type: string };
+  reason: string;               // почему — на языке интерфейса: «Видеокарта RTX 3060 Ti, 8 ГБ — …»
+  options: {                    // tiny, base, small, medium, large-v3-turbo, large-v3 (по порядку)
+    model: string; repo: string /* репозиторий Hugging Face */;
+    size_mb: number;            // размер файлов модели, МБ по 10⁶ байт (как на Hugging Face)
+    quality: 1 | 2 | 3 | 4 | 5; // точность распознавания русского
+    speed: 1 | 2 | 3 | 4 | 5;
+    recommended: boolean;       // ровно у одной — recommended.model
+    note: string;               // пояснение на языке интерфейса
+  }[];
+};
 type Stats = {
   words_today: number; words_week: number; words_total: number;
   wpm: number;              // средняя скорость диктовки: слова / минуты речи (за всё время)
@@ -215,7 +235,7 @@ type Stats = {
 | `history` | `HistoryItem` — добавлена запись |
 | `notice` | `{text /* на языке интерфейса */, level: "info"\|"warn"\|"error", action: null \| "relaunch_admin" \| "open_settings_ai" \| "open_settings_insert" \| "dict_undo" \| "dict_add", toast: bool, data: LearnNotice \| null}` — `data` есть всегда: `null` у всех уведомлений, кроме обучения словаря (см. «Обучение словаря на правках»); `open_settings_insert` — открыть настройки вставки/рассылки («Не выбраны RDP-сессии для рассылки») |
 | `ai_usage` | `{kind: "cleanup"\|"command"\|"test", cost_usd, tokens_in, tokens_out, today_cost_usd}` — после каждого вызова ИИ (и неудачного: стоимость 0); неизвестное — 0 |
-| `progress` | `{what: "model"\|"cuda", pct: 0..100, text, done: bool, error: string\|null}` |
+| `progress` | `{what: "model"\|"cuda", pct: 0..100, text, done: bool, error: string\|null}` — загрузка (`setup_download`) или перенос модели в другую папку (`model_dir_set` с `move`, тоже `what: "model"`, текст «Переношу модель …: N из M МБ») |
 | `settings` | объект настроек (после `set_settings`) |
 
 ## Настройки (`%APPDATA%\Rupor\settings.json`)
@@ -259,7 +279,11 @@ type Stats = {
   "duck_mode": "duck",              // звук других программ во время записи: off | duck | mute
   "duck_level": 15,                 // duck: до скольких процентов исходной громкости (0–100)
   "language": "system",             // язык интерфейса и сообщений: system | ru | en
-  "dictation_language": "auto"      // язык распознавания: auto | ru | en (см. «Локализация»)
+  "dictation_language": "auto",     // язык распознавания: auto | ru | en (см. «Локализация»)
+  "model_dir": ""                   // папка моделей Whisper (формат кэша HuggingFace, как
+                                    // download_root у faster-whisper); "" — кэш HuggingFace по
+                                    // умолчанию. Полный путь (диск или UNC), %VAR% и ~
+                                    // раскрываются: "D:\\Модели\\whisper-models"
 }
 ```
 
@@ -534,13 +558,64 @@ http.client (`ValueError` с «Bearer <ключ>») превращаются в 
 
 ### `fetch.py` (загрузки первого запуска)
 ```python
-def model_ready(model: str) -> bool
-def download_model(model: str, on_progress: Callable[[float, str], None]) -> str   # путь
+# cache_dir — папка моделей (settings.model_dir or None; None — кэш HuggingFace по умолчанию)
+def model_ready(model: str, cache_dir=None) -> bool
+def model_path(model: str, cache_dir=None) -> Path | None   # папка снимка модели, без сети
+def download_model(model: str, on_progress: Callable[[float, str], None], cache_dir=None) -> str   # путь
+def model_cache_dir(model_dir: str) -> Path   # действующая папка: model_dir или HF_HUB_CACHE
+def move_model(model, src_dir, dst_dir, on_progress) -> str   # перенос в другую папку, путь
+def remove_model(model, cache_dir) -> bool   # удалить models--org--name и .locks/models--org--name
+def check_writable_dir(path) -> Path     # создать папку и проверить запись (FetchError)
+def model_sizes(repos, budget_s=4.0) -> dict[str, int]   # размеры с Hub, параллельно, кэш на процесс
 def cuda_ready() -> bool                 # DLL cuBLAS найдены (cuDNN CTranslate2 для Whisper не нужен — проверено) (pip-пакеты nvidia-* или %LOCALAPPDATA%\Rupor\cuda)
 def download_cuda(on_progress) -> None   # колесо nvidia-cublas-cu12 (≈0,55 ГБ)
                                          # с PyPI (версии как в pyproject), из них извлекаются только nvidia/*/bin/*.dll
 def cuda_dll_dirs() -> list[Path]
 ```
+
+### Папка модели и подбор модели (`config.model_dir`, `fetch.move_model`, `recommend.py`)
+- **Где лежит модель.** Настройка `model_dir` — папка в формате кэша HuggingFace
+  (`models--<org>--<имя>/blobs|snapshots|refs|trees`, замки — `.locks/models--…`), тот же формат,
+  что `download_root` у faster-whisper: папку можно указать и другим программам на
+  faster-whisper. `""` — кэш HuggingFace по умолчанию (старые установки работают как раньше).
+  Поиск (`engine._load_model`/`_reload_model`, `setup_status`, `asr.Recognizer`) и загрузка
+  (`_download`) — с `cache_dir = model_dir or None`.
+- **Проверка** (`config.normalize_model_dir`): строка; пробелы и кавычки вокруг («Копировать как
+  путь») снимаются; `%VAR%` и `~` раскрываются (незаданная переменная — ошибка); путь только
+  полный — с буквой диска (`D:\…`) или UNC (`\\сервер\папка`); символы `< > : " | ? *` —
+  ошибка; `ntpath.normpath`. Кириллица и пробелы допустимы (`D:\Модели\whisper-models`).
+- **Смена папки без переноса** (`set_settings {model_dir}` или `model_dir_set` с `move=false`):
+  `model_dir` входит в `config.MODEL_FIELDS` — перезагрузка модели как при смене модели: есть
+  в новой папке — грузится оттуда, нет — качается туда, прежняя распознаёт до готовности.
+- **Перенос** (`model_dir_set` с `move=true`, модель есть в нынешней папке): поток
+  `rupor-model-move` занимает слот `"model"` в `engine._downloading` (загрузка модели в это
+  время не начнётся) → `fetch.move_model`:
+  - в новой папке модель уже целиком — копировать нечего;
+  - тот же том и папки модели там нет — `os.replace` папки (мгновенно; не вышло — копия);
+  - другой том — копия во временную `models--<org>--<имя>.rupor-tmp` рядом и переименование: прерванная
+    копия никогда не выглядит полной. Прогресс по байтам (`progress` `what: "model"`).
+    Относительные ссылки snapshots (`../../blobs/<хэш>`) пересоздаются такими же; создать
+    ссылку нельзя (нет права) — на её месте пишется сам файл, а блоб отдельно не копируется
+    (без двойного места). `refs/` и `trees/` копируются (`refs/main` нужен поиску без сети),
+    `*.incomplete` — нет. Перед копией — проверка места (размер файлов + 64 МБ), после — что
+    `model_path` находит модель в новой папке; любая ошибка — временная копия удаляется,
+    `FetchError`. Исходная папка `move_model` не удаляет;
+  - затем `model_dir` сохраняется (событие `settings`; не записался — переименованная модель
+    возвращается на место, ошибка), задание `reload` перезагружает модель из новой папки,
+    следом задание `model_moved` удаляет старую копию (`fetch.remove_model` — только
+    `models--org--name` и `.locks/models--org--name`, в фоне) и шлёт `notice`.
+  Распознавание всё это время работает на загруженной модели.
+- **Подбор модели** (`model_recommend`, `recommend.py`): `asr.gpu_info` (NVML) и
+  `asr.cuda_device_count`, память — `GlobalMemoryStatusEx`, потоки — `os.cpu_count()`.
+  Видеокарта NVIDIA (её видит CUDA или хотя бы драйвер — cuBLAS при первом запуске ещё не
+  скачан): видеопамяти от 4 ГБ — `large-v3-turbo`, `cuda`, `float16`; 2–4 ГБ (и объём не
+  определился) — `large-v3-turbo`, `cuda`, `int8_float16`; меньше — `small`, `cuda`,
+  `int8_float16`. Без видеокарты: от 8 потоков и от 8 ГБ памяти — `small`, `cpu`, `int8`, иначе
+  `base`, `cpu`, `int8`. Пороги с допуском (3800 МБ, 1900 МБ, 7,5 ГБ). Варианты — tiny, base,
+  small, medium, large-v3-turbo, large-v3 (distil-* — только английские, не предлагаются);
+  размер — по данным Hub (`fetch.model_sizes`: запросы параллельно, все вместе не дольше 4 с,
+  удачные — в кэше процесса, неудачные не переспрашиваются 5 минут), иначе запасной
+  (`recommend.FALLBACK_MB`: 75, 145, 484, 1530, 1620, 3090).
 
 ### Изменения в существующих модулях
 - `hotkeys.GestureMachine`: `command_mod` (по умолчанию правый Alt) → `Kind.COMMAND`
@@ -885,7 +960,10 @@ ptt + command_modifier (удержание) → говорим инструкц�
 ## Tauri (Rust) — `ui/src-tauri`
 
 - Tauri 2, плагины: `single-instance` (второй запуск → показать main), `autostart`
-  (JS API во фронтенде), `notification` (не обязателен).
+  (JS API во фронтенде), `dialog` (системный выбор папки моделей — кнопка «Обзор…» в
+  `ModelFolder`; разрешение `dialog:allow-open` только окну `main`, `capabilities/main.json`;
+  ветка `~2.7` — последняя под tauri 2.11, в `package.json` тоже `~2.7`), `notification`
+  (не обязателен).
 - Окна (`tauri.conf.json`):
   - `main`: `index.html`, 1080×720, min 900×600, `decorations: true`, `transparent: true`,
     `windowEffects: {effects: ["mica"]}`, `visible: false` (показывается из трея, мастером или при
@@ -982,6 +1060,25 @@ Vite + React 18 + TypeScript strict + Tailwind + Framer Motion + lucide-react.
   Стили, Правила приложений, Настройки,
   Справка. Мастер первого запуска — полноэкранный маршрут, если `first_run_done=false`;
   его первый шаг — выбор языка.
+- Модель и её папка:
+  - мастер, шаг «Видеокарта и модель»: рекомендация `model_recommend` (кэш 10 мин на язык
+    интерфейса — `reason` и `note` приходят на нём) и список моделей с размером, качеством и
+    скоростью; выбор шлёт `set_settings {model, device, compute_type}` (`device` и
+    `compute_type` — из `recommended`). Рекомендация подставляется сама один раз за проход
+    мастера и только если модели `settings.model` нет на диске (уже скачанную мастер молча не
+    меняет); не пришла — мастер работает с моделью из настроек. Ниже — `ModelFolder`
+    («Куда скачать модель») и строки загрузки CUDA и модели;
+  - `src/components/ModelFolder.tsx` — общий для мастера и «Настройки → Диктовка → Папка
+    модели»: действующая папка (`setup_status.model_dir`), поле для пути, «Обзор…»
+    (`lib/tauri.ts` `pickFolder` → plugin-dialog; вне Tauri кнопки нет), «По умолчанию» (при
+    непустом `model_dir`, в подсказке — `model_dir_default`). Новая папка при скачанной модели
+    — окно «Перенести модель?»: «Перенести» (`model_dir_set` `move: true`), «Не переносить»
+    (`move: false`), «Отмена»; прогресс переноса — события `progress` `what: "model"`, полоса
+    уходит по `done` или по событию `settings` с новым `model_dir`; тост об успехе — `notice`
+    ядра. Пока модель качается или переносится, смена папки (и выбор модели в мастере)
+    недоступна;
+  - демо: `?mock=1&first_run=1&gpu=0` — компьютер без видеокарты NVIDIA (рекомендация `small`
+    на процессоре); путь с `full` (`E:\full-disk\models`) — ошибка переноса «не хватает места».
 - Маршруты (hash-роутер `src/lib/router.ts`, `#/<страница>/<вкладка>/<якорь>`; их же
   принимают `show_main {route}` и событие `navigate`):
   - `#/history/draft` — вкладка «Черновик»;
@@ -1056,7 +1153,7 @@ def selftest() -> tuple[bool, str]             # «локализация: ok (r
 
 - Каталоги `core/rupor/locales/ru.json` и `en.json` — плоские объекты `ключ → шаблон`, ключи
   **одинаковые**, кроме форм множественного числа (группы `api.*`, `cfg.*`, `setting.*`, `eng.*`, `ai.*`, `asr.*`, `fetch.*`,
-  `cred.*`, `inj.*`, `learn.*`, `tray.*`, `cli.*`, …). Подстановки — `str.format`
+  `cred.*`, `inj.*`, `learn.*`, `rec.*` (подбор модели), `tray.*`, `cli.*`, …). Подстановки — `str.format`
   (`tr("eng.mic_unavailable", error=e)`), фигурные скобки самого текста удвоены (`{{id}}`);
   недостающий параметр остаётся в тексте как `{name}`. Нет ключа в каталоге языка — берётся
   русский, нет и там — сам ключ (и предупреждение в журнал).

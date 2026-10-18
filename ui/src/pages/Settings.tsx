@@ -36,6 +36,7 @@ import { KeyManager } from "../components/KeyManager";
 import { LearnModePicker } from "../components/Learn";
 import { LevelBar } from "../components/Level";
 import { Logo } from "../components/Logo";
+import { ModelFolder } from "../components/ModelFolder";
 import { Button, Checkbox, ChipInput, IconButton, Segmented, Slider, Switch } from "../components/ui/controls";
 import { AiSpendSection } from "../components/AiSpend";
 import { Badge, Card, LoadError, PageHeader, SectionTitle, SettingRow, Skeleton } from "../components/ui/display";
@@ -278,6 +279,8 @@ const MODELS: { value: string; hint: TKey }[] = [
   { value: "large-v3", hint: "settings.dictation.models.large_v3" },
   { value: "medium", hint: "settings.dictation.models.medium" },
   { value: "small", hint: "settings.dictation.models.small" },
+  { value: "base", hint: "settings.dictation.models.base" },
+  { value: "tiny", hint: "settings.dictation.models.tiny" },
 ];
 
 function Dictation({ s, set }: SectionProps) {
@@ -416,6 +419,9 @@ function Dictation({ s, set }: SectionProps) {
         <Card padded={false}>
           <SettingRow title={t("settings.dictation.model")} description={t("settings.dictation.modelHint")}>
             <Select value={s.model} options={models} onChange={(v) => void set({ model: v })} className="w-[240px]" minWidth={340} align="right" />
+          </SettingRow>
+          <SettingRow stacked title={t("settings.dictation.modelDir")} description={t("settings.dictation.modelDirHint")}>
+            <ModelFolder />
           </SettingRow>
           <SettingRow title={t("settings.dictation.device")} description={t("settings.dictation.deviceHint")}>
             <Segmented

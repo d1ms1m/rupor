@@ -271,6 +271,7 @@ function createBackend(): Backend {
       aiOff: q.get("ai") === "0",
       rdp: q.get("rdp") === "0" ? "0" : q.get("rdp") === "none" ? "none" : null,
       lowBalance: q.get("low_balance") === "1",
+      noGpu: q.get("gpu") === "0",
       scene: q.get("scene"),
       lang: urlLocale(),
     });

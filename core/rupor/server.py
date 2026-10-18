@@ -49,7 +49,7 @@ MAX_MESSAGE = 32 * 1024 * 1024  # импорт словаря может быт�
 
 # Команды, которые ждут сеть, модель или NVML: идут параллельно, не держат очередь соединения
 LONG_COMMANDS = frozenset({"ai_test", "ai_key_check", "ai_balance", "test_record_stop",
-                           "cuda_check"})
+                           "cuda_check", "model_recommend"})
 
 # Окна Tauri (Windows: http(s)://tauri.localhost; macOS/Linux: tauri://localhost), dev-сервер
 # Vite (npm run dev / preview) и клиенты без Origin (Rust-проба, тесты, tools/ws_smoke.py).

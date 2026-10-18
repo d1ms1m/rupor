@@ -474,6 +474,7 @@ UI_SETTING_NAMES = {
     "double_tap_ms": "settings.dictation.doubleTap",
     "duck_level": "settings.dictation.duck.level",
     "learn_mode": "settings.dictation.learn",
+    "model_dir": "settings.dictation.modelDir",
     "insert_mode": "settings.insert.mode",
     "add_trailing_space": "settings.insert.trailingSpace",
     "broadcast_targets": "settings.insert.sessions",

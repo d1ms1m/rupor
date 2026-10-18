@@ -286,6 +286,22 @@ export async function setWindowTitle(title: string): Promise<void> {
   }
 }
 
+/**
+ * Выбрать папку системным диалогом (plugin-dialog, только окно main). null — отменили, или
+ * не Tauri (демо ?mock=1, браузер): там путь вводят в поле.
+ */
+export async function pickFolder(defaultPath?: string, title?: string): Promise<string | null> {
+  if (!inTauri()) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({
+    directory: true,
+    multiple: false,
+    defaultPath: defaultPath || undefined,
+    title,
+  });
+  return typeof picked === "string" && picked ? picked : null;
+}
+
 /** Тема окна (влияет на оттенок Mica). null — как в системе. */
 export async function setWindowTheme(theme: "light" | "dark" | null): Promise<void> {
   if (!inTauri()) return;

@@ -22,9 +22,17 @@
 // через WS нельзя); --no-ai-usage — пропустить шаг.
 // duck_mode/duck_level меняются только вне записи (ядро приглушает звук лишь во время
 // записи), так что громкость других приложений проверка не трогает.
+// Папка моделей: model_dir_set вызывается только так, что ничего не переносится и не
+// качается (та же папка, неверные пути — ошибки; смена папки во временную и обратно — только
+// на ядре первого запуска без модели, которое ждёт setup_download); пути (в них имя
+// пользователя) не печатаются.
+// model_recommend может спросить у Hugging Face размеры моделей (открытые метаданные, бюджет
+// ядра ~5 с).
 // Остальные изменения данных делаются на проверочных записях и откатываются в конце.
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
@@ -97,6 +105,13 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const lower = (x) => String(x).toLowerCase();
+/** Пути Windows равны без учёта регистра, вида разделителя и «\» в конце. */
+const samePath = (a, b) => {
+  const norm = (p) => String(p).trim().replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+  return norm(a) === norm(b);
+};
+/** Абсолютный путь Windows: буква диска или UNC. */
+const absPath = (p) => typeof p === "string" && (/^[A-Za-z]:[\\/]/.test(p) || /^\\\\[^\\]+\\[^\\]+/.test(p));
 const short = (v) => {
   const s = JSON.stringify(v);
   return s === undefined ? "undefined" : s.length > 60 ? `${s.slice(0, 57)}…` : s;
@@ -553,10 +568,134 @@ if (AI_USAGE) {
 }
 
 // Мастер
-await step("setup_status", async () => {
+await step("setup_status: модель, CUDA, папка модели (model_dir — абсолютная, при пустой настройке — кэш HF)", async () => {
   const s = await call("setup_status");
-  return `модель: ${s.model_ready}, CUDA: ${s.cuda_ready}`;
+  const cur = await call("get_settings");
+  assert(absPath(s.model_dir) && absPath(s.model_dir_default), "model_dir / model_dir_default — не абсолютные пути");
+  assert(typeof cur.model_dir === "string", `settings.model_dir=${short(cur.model_dir)}`);
+  if (cur.model_dir === "") {
+    assert(samePath(s.model_dir, s.model_dir_default), "settings.model_dir пуст, а папка — не кэш Hugging Face по умолчанию");
+  } else {
+    assert(samePath(s.model_dir, cur.model_dir), "setup_status.model_dir ≠ settings.model_dir");
+  }
+  return `модель: ${s.model_ready}, CUDA: ${s.cuda_ready}, папка: ${cur.model_dir === "" ? "по умолчанию (кэш HF)" : "своя"}`;
 });
+await step("model_recommend: модель под железо, список без distil-*, причина и пояснения на языке интерфейса", async () => {
+  const t1 = Date.now();
+  const r = await call("model_recommend", undefined, 20_000);
+  const ms = Date.now() - t1;
+  const names = r.options.map((o) => o.model);
+  const need = ["tiny", "base", "small", "medium", "large-v3-turbo", "large-v3"];
+  assert(need.every((m) => names.includes(m)), `модели: ${names.join(", ")}`);
+  assert(!names.some((m) => m.startsWith("distil")), "в списке distil-* (они только для английского)");
+  assert(new Set(names).size === names.length, "модели повторяются");
+  const recd = r.options.filter((o) => o.recommended);
+  assert(recd.length === 1 && recd[0].model === r.recommended.model, "recommended в options ≠ recommended.model");
+  for (const o of r.options) {
+    assert(o.size_mb > 0 && o.repo.includes("/"), `${o.model}: size_mb=${o.size_mb}, repo=${short(o.repo)}`);
+    assert(humanText(o.note), `${o.model}: note не на языке интерфейса: ${short(o.note)}`);
+  }
+  assert(humanText(r.reason), `reason не на языке интерфейса: ${short(r.reason)}`);
+  // ram_gb 0 — память не определилась
+  assert(Number.isInteger(r.cpu_threads) && r.cpu_threads >= 1 && r.ram_gb >= 0, `потоков ${r.cpu_threads}, памяти ${r.ram_gb} ГБ`);
+  // Правила подбора (docs/ARCHITECTURE.md): видеокарта NVIDIA есть (CUDA её видит или есть
+  // драйвер, а библиотеки ещё не скачаны) — по видеопамяти, нет — по процессору и памяти.
+  // У границ (2 и 4 ГБ видеопамяти, 8 ГБ памяти) ядро берёт допуск («8 ГБ» — это 7,9) —
+  // там не сверяем
+  const rec = r.recommended;
+  const vram = r.vram_mb === null ? null : r.vram_mb / 1024;
+  const gpu = r.gpu_name !== null || r.cuda_ok;
+  const near = (v, edge) => Math.abs(v - edge) < 0.5;
+  let want = null;
+  if (gpu && vram === null) {
+    // объём видеопамяти неизвестен — правилами не задано, только что это видеокарта
+    assert(rec.device === "cuda", `видеокарта есть, а рекомендация на ${rec.device}`);
+  } else if (gpu && !near(vram, 4) && !near(vram, 2)) {
+    want = vram >= 4 ? ["large-v3-turbo", "cuda", "float16"] : vram >= 2 ? ["large-v3-turbo", "cuda", "int8_float16"] : ["small", "cuda", "int8_float16"];
+  } else if (!gpu && !near(r.ram_gb, 8)) {
+    const ramOk = r.ram_gb >= 8 || r.ram_gb === 0;
+    want = r.cpu_threads >= 8 && ramOk ? ["small", "cpu", "int8"] : ["base", "cpu", "int8"];
+  }
+  if (want) {
+    const got = [rec.model, rec.device, rec.compute_type];
+    assert(got.join("/") === want.join("/"), `рекомендация ${got.join("/")}, по правилам ${want.join("/")}`);
+  }
+  assert(ms < 10_000, `ответ за ${ms} мс (бюджет ядра ~5 с)`);
+  const t2 = Date.now();
+  await call("model_recommend", undefined, 20_000);
+  return `${rec.model} / ${rec.device} / ${rec.compute_type}; ${r.gpu_name ?? "без видеокарты"}, ${r.cpu_threads} потоков, ${r.ram_gb} ГБ; ${ms} мс, повтор ${Date.now() - t2} мс`;
+});
+await step("model_dir в set_settings: относительный путь и не строка — ошибки на языке интерфейса, папка не меняется", async () => {
+  const before = (await call("get_settings")).model_dir;
+  const err = await callErr("set_settings", { patch: { model_dir: "models\\whisper" } });
+  await callErr("set_settings", { patch: { model_dir: 5 } });
+  assert((await call("get_settings")).model_dir === before, "неверная папка применилась");
+  return err;
+});
+await step("model_dir_set: та же папка — {ok, moving:false} без перемен; относительный путь, путь-файл — ошибки", async () => {
+  const s0 = await call("get_settings");
+  const st0 = await call("setup_status");
+  // та же папка, что сейчас (и явным путём, и как в настройках) — ничего не переносится и не качается
+  for (const path of [st0.model_dir, s0.model_dir]) {
+    const r = await call("model_dir_set", { path, move: true });
+    assert(r.ok === true && r.moving === false, `та же папка: ${short(r)}`);
+  }
+  const err = await callErr("model_dir_set", { path: "relative\\models", move: false });
+  await callErr("model_dir_set", { path: 5, move: false });
+  await callErr("model_dir_set", { path: st0.model_dir, move: "yes" });
+  // на месте папки — файл: создать её нельзя
+  const file = join(tmpdir(), `rupor-contract-${process.pid}-${Date.now()}.txt`);
+  writeFileSync(file, "x");
+  try {
+    await callErr("model_dir_set", { path: file, move: false });
+  } finally {
+    unlinkSync(file);
+  }
+  const s1 = await call("get_settings");
+  const st1 = await call("setup_status");
+  assert(s1.model_dir === s0.model_dir && samePath(st1.model_dir, st0.model_dir), "папка модели сменилась");
+  return err;
+});
+// Смена папки по-настоящему — только на ядре, которое после неё ничего не станет качать:
+// первый запуск (мастер не пройден), модели нет, ядро ждёт setup_download (state=error).
+// Ядро после мастера или со скачанной моделью начало бы загрузку (или перенос) гигабайтов.
+await step("model_dir_set и set_settings со сменой папки: событие settings, setup_status — новая папка, возврат", async () => {
+  const st0 = await call("setup_status");
+  const s0 = await call("get_settings");
+  const live = await call("get_state");
+  if (st0.first_run_done || st0.model_ready || live.state !== "error" || live.model_loaded) {
+    unverified.push("model_dir_set и set_settings {model_dir} со сменой папки (ядро не на первом запуске или модель скачана — смена папки начала бы загрузку)");
+    return "пропуск: ядро не ждёт мастера";
+  }
+  const dir = join(tmpdir(), `rupor-contract-models-${process.pid}-${Date.now()}`);
+  try {
+    // модели нет — переносить нечего: move=true сводится к простой смене папки
+    let since = Date.now();
+    const r = await call("model_dir_set", { path: dir, move: true });
+    assert(r.ok === true && r.moving === false, `смена папки: ${short(r)}`);
+    const ev = await c.waitEvent("settings", since, 3000, (d) => samePath(d.model_dir, dir));
+    checkEvent("settings", ev);
+    const st1 = await call("setup_status");
+    assert(samePath(st1.model_dir, dir) && st1.model_ready === false, "setup_status.model_dir — не новая папка");
+    assert(samePath(st1.model_dir_default, st0.model_dir_default), "model_dir_default сменился");
+    // повтор той же папки — ничего не делает
+    const again = await call("model_dir_set", { path: dir, move: false });
+    assert(again.moving === false, short(again));
+    // возврат обычной set_settings (тот же валидатор, без переноса)
+    since = Date.now();
+    const s1 = await call("set_settings", { patch: { model_dir: s0.model_dir } });
+    assert(s1.model_dir === s0.model_dir, `model_dir=${short(s1.model_dir)}`);
+    await c.waitEvent("settings", since, 3000, (d) => d.model_dir === s0.model_dir);
+  } finally {
+    const back = await c.raw("model_dir_set", { path: s0.model_dir, move: false });
+    if (!back.ok) console.log("  !!   папку модели вернуть не удалось");
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const st2 = await call("setup_status");
+  assert(samePath(st2.model_dir, st0.model_dir), "папка модели не вернулась");
+  return "смена туда и обратно, перенос не понадобился";
+});
+unverified.push("model_dir_set с переносом скачанной модели (move=true): перенос и загрузка модели — гигабайты, на живом ядре не запускаются");
 await step("list_devices", async () => `${(await call("list_devices")).length} устройств ввода`);
 
 // Словарь

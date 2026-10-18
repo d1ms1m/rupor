@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "Главное окно Рупора: управление окном, тема, автозапуск",
+  "description": "Главное окно Рупора: управление окном, тема, автозапуск, выбор папки моделей",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -19,6 +19,7 @@
     "core:window:allow-set-effects",
     "core:window:allow-set-title",
     "core:app:allow-set-app-theme",
-    "autostart:default"
+    "autostart:default",
+    "dialog:allow-open"
   ]
 }

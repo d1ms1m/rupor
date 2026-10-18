@@ -1,7 +1,7 @@
 {
   "name": "rupor-ui",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "license": "MIT",
   "author": "listapad2024",
   "homepage": "https://github.com/listapad2024/rupor",
@@ -27,6 +27,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-autostart": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "~2.7.1",
     "framer-motion": "^12.23.0",
     "lucide-react": "^1.0.0",
     "react": "^18.3.1",

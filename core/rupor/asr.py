@@ -1,7 +1,8 @@
 """Распознавание речи: faster-whisper (CTranslate2) на CUDA с откатом на CPU.
 
-Модель грузится только из локального кэша HuggingFace (``fetch.model_path``) — сеть здесь
-не трогается; скачивание — отдельной командой (``fetch.download_model``) с прогрессом.
+Модель грузится только из локального кэша HuggingFace (``fetch.model_path``) в папке
+``model_dir`` из настроек (пусто — кэш по умолчанию) — сеть здесь не трогается; скачивание —
+отдельной командой (``fetch.download_model``) с прогрессом.
 DLL CUDA ищет ``fetch`` (pip-пакеты nvidia-* или %LOCALAPPDATA%\\Rupor\\cuda).
 
 Язык распознавания (``choose_language``): настройка ``dictation_language`` — ``ru``/``en``
@@ -214,7 +215,7 @@ class Recognizer:
     # ---------- загрузка ----------
 
     def _create(self, device: str, compute_type: str) -> Any:
-        path = fetch.model_path(self.s.model)
+        path = fetch.model_path(self.s.model, self.s.model_dir or None)
         if path is None:
             raise ModelMissing(i18n.tr("asr.model_missing", model=self.s.model))
         return WhisperModel(str(path), device=device, compute_type=compute_type)

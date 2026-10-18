@@ -135,9 +135,14 @@ Rupor works in English and Russian — both the interface and the dictation.
 4. On first launch the setup wizard opens:
    1. interface language;
    2. microphone selection and a level check;
-   3. a graphics card check and the download of the speech model (≈ 1.6 GB, from Hugging Face)
+   3. a graphics card check, choosing the speech model and downloading it (from Hugging Face)
       and the CUDA cuBLAS library (≈ 0.55 GB, from PyPI) — once; after that everything works
-      offline;
+      offline. The wizard suggests a model that fits your computer: with an NVIDIA card with
+      4 GB or more — `large-v3-turbo` (≈ 1.6 GB, the best for Russian), with a smaller card — the
+      same model in a memory-saving mode or `small`, without one — `small` or `base` (depending
+      on the processor and RAM); the other models are listed next to it with size, accuracy and
+      speed, and you can pick any. You can also choose where to download the model (see
+      [Model folder](#model-folder));
    4. a test phrase — say something and see the result;
    5. shortcuts;
    6. an OpenRouter key for AI cleanup (you can skip this step);
@@ -150,9 +155,26 @@ the computer at first launch, the wizard is skipped.
 **Uninstalling**: Windows Settings → Apps → Installed apps (on Windows 10 — Apps & features) →
 Rupor (Рупор if you installed it in Russian) → Uninstall. The "Delete the application data"
 checkbox wipes settings, history, logs, the CUDA libraries and the AI keys in Credential Manager.
-The model lives in the shared Hugging Face cache
-(`%USERPROFILE%\.cache\huggingface\hub\models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`);
-delete it by hand if you need to.
+The model lives in the model folder — by default the shared Hugging Face cache
+(`%USERPROFILE%\.cache\huggingface\hub\models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`),
+or the folder you chose yourself; delete it by hand if you need to.
+
+### Model folder
+
+By default the model is kept in the shared Hugging Face cache (`%USERPROFILE%\.cache\huggingface\hub`).
+You can pick another folder — say, `D:\Models\whisper-models` on a bigger drive — in the wizard
+(the model step, *Where to download the model*) or later in Settings → Dictation → Recognition →
+*Model folder* (the `model_dir` setting; *Default* switches back to the Hugging Face cache). Use a
+full path; environment variables (`%USERPROFILE%\models`) and non-Latin names are fine.
+
+If the model is already downloaded, Rupor offers to move it to the new folder: instantly on the
+same drive, by copying with a progress bar to another drive; the old copy is deleted after the
+move. Without moving, the model is downloaded into the new folder again (unless it is already
+there). Dictation keeps working on the current model while it is being moved or downloaded.
+
+The folder keeps models in the Hugging Face cache layout (`models--<author>--<model>/…`), the same
+as faster-whisper's `download_root`, so other faster-whisper programs can be pointed at it and will
+use the model that is already there.
 
 ## Usage
 
@@ -383,7 +405,7 @@ OpenRouter. With Ollama everything stays on your computer.
 | History, dictionary, snippets, stats, draft, AI spending, frequent words | `%APPDATA%\Rupor\rupor.db` (SQLite) |
 | Logs (rotated; log messages are in Russian) | `%APPDATA%\Rupor\logs\` (`rupor.log`, `ui.log`, `crash.log`) |
 | Volume of lowered apps (only while recording) | `%APPDATA%\Rupor\duck.json` |
-| Speech model | `%USERPROFILE%\.cache\huggingface\hub` |
+| Speech model | `%USERPROFILE%\.cache\huggingface\hub` or your own folder (`model_dir`, see [Model folder](#model-folder)) |
 | CUDA libraries | `%LOCALAPPDATA%\Rupor\cuda` |
 | AI keys | Windows Credential Manager: `Rupor/openrouter`, `Rupor/anthropic` |
 
@@ -406,6 +428,7 @@ Everything is configured in the Rupor window. You can also edit
 | `tap_max_ms`, `double_tap_ms` | thresholds for a short press and a double press |
 | `input_device` | microphone: part of its name or an index; `null` — the system default |
 | `model`, `device`, `compute_type`, `beam_size` | speech model; changing them reloads the model in the background |
+| `model_dir` | model folder (Hugging Face cache layout); `""` (default) — `%USERPROFILE%\.cache\huggingface\hub`. Editing it by hand only switches the folder (if the model is not there, it is downloaded); moving is done from the Rupor window |
 | `terms` | hint terms for recognition (dictionary terms are added to them) |
 | `insert_mode` | `auto` / `type` / `clipboard` |
 | `learn_mode` | learning from corrections: `auto` (default) / `suggest` / `off` |

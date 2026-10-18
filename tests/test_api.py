@@ -743,10 +743,13 @@ def test_mic_monitor_levels(env: Env) -> None:
 
 def test_setup_status_and_download(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     c = env.client()
-    assert c.call("setup_status") == {"model_ready": True, "cuda_ready": True,
-                                      "first_run_done": True}
+    st = c.call("setup_status")
+    assert {k: st[k] for k in ("model_ready", "cuda_ready", "first_run_done")} == {
+        "model_ready": True, "cuda_ready": True, "first_run_done": True}
+    assert st["model_dir"] == st["model_dir_default"] == str(fetch.model_cache_dir(""))
 
-    def fake_download(model: str, cb: Callable[[float, str], None]) -> str:
+    def fake_download(model: str, cb: Callable[[float, str], None],
+                      cache_dir: Any = None) -> str:
         for p in (0, 50, 100):
             cb(float(p), f"Модель {model}: {p}%")
         return "x"
@@ -1037,7 +1040,8 @@ def test_missing_model_download_flow(tmp_path: Path, monkeypatch: pytest.MonkeyP
     ready = {"v": False}
     downloads: list[str] = []
 
-    def fake_download(model: str, cb: Callable[[float, str], None]) -> str:
+    def fake_download(model: str, cb: Callable[[float, str], None],
+                      cache_dir: Any = None) -> str:
         downloads.append(model)
         cb(50.0, "половина")
         ready["v"] = True
@@ -1287,7 +1291,8 @@ def test_model_change_keeps_old_model_while_downloading(env: Env,
     gate = threading.Event()
     unloads: list[int] = []
 
-    def fake_download(model: str, cb: Callable[[float, str], None]) -> str:
+    def fake_download(model: str, cb: Callable[[float, str], None],
+                      cache_dir: Any = None) -> str:
         gate.wait(5)
         ready[model] = True
         return "x"
@@ -1317,7 +1322,8 @@ def test_model_change_keeps_old_model_while_downloading(env: Env,
 
 
 def test_model_download_failure_keeps_old_model(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
-    def failing(model: str, cb: Callable[[float, str], None]) -> str:
+    def failing(model: str, cb: Callable[[float, str], None],
+                cache_dir: Any = None) -> str:
         raise fetch.FetchError("Нет интернета")
 
     monkeypatch.setattr(fetch, "model_ready", lambda model, cache_dir=None: model != "small")
