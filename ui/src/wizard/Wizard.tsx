@@ -488,16 +488,27 @@ function ModelStep({
     void set(patch);
   };
 
-  // Рекомендацию подставляем сами, когда шаг открылся впервые за проход мастера и модели
-  // ещё нет на диске (первая установка). Уже скачанную модель молча не меняем: мастер можно
-  // запустить и из настроек — иначе он начал бы качать другую.
+  // Рекомендацию подставляем сами один раз за проход мастера и только на первой установке:
+  // мастер ещё не пройден, модели нет на диске и она не качается. Уже скачанную модель молча
+  // не меняем; при повторном запуске мастера из настроек ядро уже качает или держит модель,
+  // выбранную там, — подмена выбросила бы её загрузку. «Скачать» до прихода рекомендации
+  // тоже закрепляет модель из настроек (start): ядро качает её, а не подставленную.
   useEffect(() => {
     if (picked.current || !rec.data || !setup.data) return;
     picked.current = true;
-    if (!setup.data.model_ready) choose(rec.data.recommended.model);
+    if (!setup.data.model_ready && !setup.data.first_run_done && !dl.model?.running) {
+      choose(rec.data.recommended.model);
+    }
   }, [rec.data, setup.data]);
 
+  // Сменилась папка — итог прошлого переноса или загрузки (ошибка, «Модель перенесена») к ней
+  // не относится. Идущий не трогаем: удачный перенос меняет model_dir ещё до своего done
+  useEffect(() => {
+    setDl((d) => (d.model && !d.model.running ? { ...d, model: null } : d));
+  }, [s.model_dir]);
+
   const start = async (what: DownloadWhat) => {
+    if (what === "model") picked.current = true;
     setDl((d) => ({ ...d, [what]: { pct: 0, text: t("wizard.model.starting"), done: false, error: null, running: true } }));
     try {
       await call("setup_download", { what });

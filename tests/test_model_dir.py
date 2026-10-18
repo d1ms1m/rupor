@@ -434,6 +434,124 @@ def test_move_errors(tmp_path: Path) -> None:
                          lambda p, t: None)
 
 
+def junction(target: Path, link: Path) -> None:
+    """Junction link → target (как mklink /J: прав администратора не нужно)."""
+    import _winapi
+    link.parent.mkdir(parents=True, exist_ok=True)
+    _winapi.CreateJunction(str(target), str(link))
+
+
+def test_same_dir_sees_same_folder_under_other_path(tmp_path: Path) -> None:
+    real = tmp_path / "real models"
+    real.mkdir()
+    (tmp_path / "other").mkdir()
+    junction(real, tmp_path / "alias")
+    assert fetch.same_dir(real, tmp_path / "alias")
+    assert fetch.same_dir(str(real).upper(), tmp_path / "alias" / ".")
+    # папки ещё нет — по настоящему пути (junction выше раскрывается)
+    assert fetch.same_dir(real / "hub", tmp_path / "alias" / "hub")
+    assert not fetch.same_dir(real, tmp_path / "other")
+    assert not fetch.same_dir(real / "hub", tmp_path / "other" / "hub")
+
+
+@pytest.mark.parametrize("level", ["cache", "model"])
+def test_move_to_same_physical_copy_never_deletes_it(tmp_path: Path, level: str) -> None:
+    """Новая папка — та же старая под другим путём (junction на весь кэш или на саму
+    models--org--name): «уже там», и удаление «старой» копии стёрло бы единственную —
+    shares_files это видит."""
+    real = tmp_path / "real"
+    make_cache(real, links=False)
+    if level == "cache":
+        new = tmp_path / "alias"
+        junction(real, new)
+    else:
+        new = tmp_path / "new"
+        junction(real / FOLDER, new / FOLDER)
+    events, cb = progress_log()
+    path = fetch.move_model(REPO, real, new, cb)
+    assert events == [(100.0, f"Модель {REPO} уже есть в {new}")]
+    assert fetch.same_dir(path, new / FOLDER / "snapshots" / REV)   # путь — какой даст hub
+    assert fetch.shares_files(REPO, real, new) is True
+    assert fetch.model_path(REPO, real) is not None and fetch.model_path(REPO, new) is not None
+
+
+def test_shares_files_separate_copy_and_hardlinks(tmp_path: Path) -> None:
+    old, new, linked = tmp_path / "old", tmp_path / "new", tmp_path / "linked"
+    make_cache(old, links=False)
+    make_cache(new, links=False)
+    assert fetch.shares_files(REPO, old, new) is False         # честная вторая копия
+    assert fetch.shares_files(REPO, old, tmp_path / "empty") is False   # копии нет
+    # копия из жёстких ссылок на файлы старой: удалить старую — значит удалить и эти файлы
+    shutil.copytree(old, linked, copy_function=os.link)
+    assert fetch.shares_files(REPO, old, linked) is True
+    # копия внутри удаляемых папок старой
+    nested = old / FOLDER
+    shutil.copytree(old / FOLDER, tmp_path / "stage")
+    os.replace(tmp_path / "stage", nested / FOLDER)
+    assert fetch.model_path(REPO, nested) is not None
+    assert fetch.shares_files(REPO, old, nested) is True
+
+
+@pytest.mark.parametrize("sub", [FOLDER, FOLDER + "/blobs", FOLDER + "/snapshots/" + REV,
+                                 ".locks", ".locks/" + FOLDER])
+def test_move_refuses_target_inside_model_folder(tmp_path: Path, sub: str) -> None:
+    """Новая папка внутри папки самой модели или .locks: копия легла бы в то, что удаляет
+    remove_model, — пропали бы обе. Отказ до любой работы с диском."""
+    old = tmp_path / "old"
+    make_cache(old, links=False)
+    before = sorted(str(p) for p in old.rglob("*"))
+    target = old / sub
+    with pytest.raises(fetch.FetchError, match="внутри служебной папки модели"):
+        fetch.move_model(REPO, old, target, lambda p, t: None)
+    with pytest.raises(fetch.FetchError, match="Выберите другую папку"):
+        fetch.check_move_target(REPO, old, target)
+    assert sorted(str(p) for p in old.rglob("*")) == before    # ничего не создано
+    assert fetch.model_path(REPO, old) is not None
+    fetch.check_move_target(REPO, old, tmp_path / "new")         # рядом — можно
+    fetch.check_move_target(REPO, old, old / "sub")              # внутри кэша, не модели — можно
+    fetch.check_move_target("нет-такой-модели", old, target)     # папки такой модели нет
+
+
+def test_move_refuses_target_inside_model_folder_via_unc_loopback(tmp_path: Path) -> None:
+    """Папка модели под UNC-путём на эту же машину (\\\\localhost\\C$\\…): realpath его не
+    сводит к локальному, но это та же папка — перенос внутрь неё запрещён, копии целы."""
+    old = tmp_path / "old"
+    make_cache(old, links=False)
+
+    def unc(p: Path) -> str:
+        s = str(p)
+        return "\\\\localhost\\" + s[0] + "$" + s[2:]
+
+    try:
+        os.stat(unc(old))
+    except OSError as e:
+        pytest.skip(f"нет доступа к административной шаре: {e}")
+    for target in (unc(old / FOLDER), unc(old / FOLDER / "sub"), unc(old / ".locks" / "x")):
+        with pytest.raises(fetch.FetchError, match="Выберите другую папку"):
+            fetch.check_move_target(REPO, old, target)
+    assert fetch.model_path(REPO, old) is not None
+    fetch.check_move_target(REPO, old, unc(tmp_path / "new"))   # рядом — можно
+
+
+def test_move_completes_partial_destination_copy(tmp_path: Path,
+                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    """В новой папке модель «есть», но без файла, который есть в исходной (старый
+    huggingface_hub не докачал preprocessor_config.json, списка файлов trees нет): это не
+    «уже там» — копия дополняется, иначе удалилась бы полная исходная."""
+    src, dst = tmp_path / "old", tmp_path / "new"
+    make_cache(src, links=False)
+    make_cache(dst, links=False)
+    (dst / FOLDER / "snapshots" / REV / "preprocessor_config.json").unlink()
+    assert fetch.model_path(REPO, dst) is not None      # для model_path копия «полная»
+    monkeypatch.setattr(fetch, "_same_volume", lambda a, b: False)
+    events, cb = progress_log()
+    path = fetch.move_model(REPO, src, dst, cb)
+    assert Path(path) == dst / FOLDER / "snapshots" / REV
+    assert snapshot_files(dst / FOLDER) == FILES
+    assert not any("уже есть" in t for _p, t in events)
+    assert fetch.model_path(REPO, src) is not None
+
+
 # ---------------------------- удаление модели ----------------------------
 
 def test_remove_model_only_its_folders(tmp_path: Path) -> None:
@@ -476,12 +594,19 @@ def test_remove_model_reports_failure(tmp_path: Path, monkeypatch: pytest.Monkey
 
 # ---------------------------- команда model_dir_set ----------------------------
 
+MODEL = "large-v3-turbo"          # модель движка по умолчанию
+
+
 class FakeModels:
     """Где «лежит» модель (папки — как их передаёт движок: None — кэш по умолчанию) и что
-    движок просил сделать с папками."""
+    движок просил сделать с папками. Кэш по умолчанию — во временной папке теста (настоящий
+    кэш пользователя не трогается даже чтением)."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch, env: Env) -> None:
-        self.ready: set[str | None] = {None}
+        from huggingface_hub import constants
+        monkeypatch.setattr(constants, "HF_HUB_CACHE", str(env.tmp / "hf" / "hub"))
+        self.ready: set[str | None] = {None}          # где лежит MODEL
+        self.others: dict[str, set[str | None]] = {}  # где лежат другие модели
         self.moves: list[tuple[str, Any, Any]] = []
         self.removed: list[tuple[str, Any]] = []
         self.downloads: list[tuple[str, Any]] = []
@@ -492,16 +617,23 @@ class FakeModels:
         self.remove_ok = True
         self.remove_gate = threading.Event()   # снять — удаление старой копии «идёт»
         self.remove_gate.set()
+        self.download_gate = threading.Event()   # снять — загрузка «идёт»
+        self.download_gate.set()
         self.rename = False           # перенос «переименованием»: в старой папке модели нет
+        self.vanish = False           # после переноса новая папка «пропала» (флешка вынута)
+        self.load_error: Exception | None = None   # rec.load падает (файл не читается)
         monkeypatch.setattr(fetch, "model_ready", self.model_ready)
         monkeypatch.setattr(fetch, "move_model", self.move_model)
         monkeypatch.setattr(fetch, "remove_model", self.remove_model)
         monkeypatch.setattr(fetch, "download_model", self.download_model)
+        monkeypatch.setattr(fetch, "shares_files", lambda model, old, new: False)
         rec = env.rec
         real_load, real_unload = rec.load, rec.unload
 
         def load() -> None:
             self.order.append("load")
+            if self.load_error is not None:
+                raise self.load_error
             real_load()
 
         def unload() -> None:
@@ -511,8 +643,11 @@ class FakeModels:
         rec.load = load  # type: ignore[method-assign]
         rec.unload = unload  # type: ignore[method-assign]
 
+    def where(self, model: str) -> set[str | None]:
+        return self.ready if model == MODEL else self.others.setdefault(model, set())
+
     def model_ready(self, model: str, cache_dir: Any = None) -> bool:
-        return cache_dir in self.ready
+        return cache_dir in self.where(model)
 
     def move_model(self, model: str, src: Any, dst: Any, cb: Callable[[float, str], None]) -> str:
         self.moves.append((model, src, dst))
@@ -523,8 +658,9 @@ class FakeModels:
             raise self.move_error
         cb(60.0, f"Переношу модель {model}: 6 из 10 МБ")
         if self.rename:
-            self.ready.discard(src)
-        self.ready.add(dst)
+            self.where(model).discard(src)
+        if not self.vanish:
+            self.where(model).add(dst)
         return "x"
 
     def remove_model(self, model: str, cache_dir: Any) -> bool:
@@ -532,14 +668,15 @@ class FakeModels:
         self.order.append("remove")
         assert self.remove_gate.wait(10)
         if self.remove_ok:
-            self.ready.discard(cache_dir)
+            self.where(model).discard(cache_dir)
         return self.remove_ok
 
     def download_model(self, model: str, cb: Callable[[float, str], None],
                        cache_dir: Any = None) -> str:
         self.downloads.append((model, cache_dir))
         cb(50.0, "половина")
-        self.ready.add(cache_dir)
+        assert self.download_gate.wait(10)
+        self.where(model).add(cache_dir)
         return "x"
 
 
@@ -624,12 +761,33 @@ def test_model_dir_set_same_folder_is_noop(env: Env, monkeypatch: pytest.MonkeyP
     fm = FakeModels(monkeypatch, env)
     c = env.client()
     c.mark()
-    default = str(fetch.model_cache_dir(""))
-    assert c.call("model_dir_set", {"path": default, "move": True}) == {"ok": True,
-                                                                       "moving": False}
-    assert c.call("model_dir_set", {"path": "", "move": False}) == {"ok": True, "moving": False}
+    assert c.call("model_dir_set", {"path": "", "move": True}) == {"ok": True, "moving": False}
+    assert c.call("model_dir_set", {"path": ' "" ', "move": False})["moving"] is False
     assert c.call("get_settings")["model_dir"] == ""
     assert c.events("settings") == [] and fm.moves == [] and fm.order == []
+    c.close()
+
+
+def test_model_dir_set_same_folder_other_spelling_is_saved(env: Env,
+                                                           monkeypatch: pytest.MonkeyPatch
+                                                           ) -> None:
+    """Та же папка, записанная иначе (явный путь кэша по умолчанию и "", другой регистр):
+    запись сохраняется — без переноса и без удаления «старой» копии. Иначе кнопка «По
+    умолчанию» после явного пути кэша ничего бы не делала (а перенос стёр бы модель)."""
+    fm = FakeModels(monkeypatch, env)
+    default = str(fetch.model_cache_dir(""))
+    fm.ready |= {default, default.upper()}     # та же папка — модель и там «есть»
+    c = env.client()
+    assert c.call("model_dir_set", {"path": default, "move": True}) == {"ok": True,
+                                                                       "moving": False}
+    assert c.call("get_settings")["model_dir"] == default
+    assert saved_settings(env)["model_dir"] == default
+    assert c.call("model_dir_set", {"path": default.upper(), "move": True})["moving"] is False
+    assert c.call("get_settings")["model_dir"] == default.upper()
+    # «По умолчанию» после явного пути — снова "" (кэш по HF_HOME / HF_HUB_CACHE)
+    assert c.call("model_dir_set", {"path": "", "move": True}) == {"ok": True, "moving": False}
+    assert c.call("get_settings")["model_dir"] == "" and saved_settings(env)["model_dir"] == ""
+    assert fm.moves == [] and fm.removed == [] and fm.downloads == []
     c.close()
 
 
@@ -752,34 +910,213 @@ def test_set_settings_model_dir_switches_folder(env: Env, monkeypatch: pytest.Mo
     c.close()
 
 
+def test_model_dir_set_refuses_target_inside_model_folder(env: Env,
+                                                          monkeypatch: pytest.MonkeyPatch
+                                                          ) -> None:
+    """Папка внутри папки самой модели или .locks — ошибка сразу: поток переноса не
+    запускается, папка не создаётся, настройка прежняя."""
+    fm = FakeModels(monkeypatch, env)
+    default = fetch.model_cache_dir("")
+    folder = fetch.model_folder(MODEL, None)
+    c = env.client()
+    for target in (folder, folder / "snapshots", default / ".locks"):
+        for move in (True, False):
+            err = c.error("model_dir_set", {"path": str(target), "move": move})
+            assert "внутри служебной папки модели" in err, err
+    assert not folder.exists() and not (default / ".locks").exists()
+    assert c.call("get_settings")["model_dir"] == "" and fm.moves == [] and fm.order == []
+    assert not env.eng._moving and "model" not in env.eng._downloading
+    c.close()
+
+
+def test_model_dir_set_reload_failure_keeps_old_copy(env: Env,
+                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    """Копия проверена, а из новой папки модель не загрузилась (флешка отвалилась, файл не
+    читается): старая копия — единственная рабочая, её не удалять."""
+    fm = FakeModels(monkeypatch, env)
+    fm.load_error = RuntimeError("model.bin не читается")
+    new = new_folder(env)
+    old_folder = fetch.model_folder(MODEL, None)
+    c = env.client()
+    c.mark()
+    assert c.call("model_dir_set", {"path": new, "move": True})["moving"] is True
+    n = c.wait_event("notice", lambda d: d["level"] == "warn")
+    assert n["text"] == f"Модель не загрузилась из новой папки — старая копия оставлена: {old_folder}"
+    assert fm.removed == [] and None in fm.ready
+    assert fm.order == ["move", "unload", "load"]
+    assert c.call("get_settings")["model_dir"] == new
+    _wait_for(lambda: not env.eng._moving)
+    c.close()
+
+
+def test_model_dir_set_new_folder_gone_before_reload_keeps_old_copy(
+        env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """После переноса модели в новой папке не стало (вынута флешка): прежняя модель в памяти
+    продолжает работать и качается заново — старую копию не удалять."""
+    fm = FakeModels(monkeypatch, env)
+    fm.vanish = True
+    fm.download_gate.clear()
+    new = new_folder(env)
+    c = env.client()
+    c.mark()
+    assert c.call("model_dir_set", {"path": new, "move": True})["moving"] is True
+    n = c.wait_event("notice", lambda d: d["level"] == "warn")
+    assert n["text"].startswith("Модель не загрузилась из новой папки — старая копия оставлена")
+    assert fm.removed == [] and env.rec.loaded
+    fm.download_gate.set()
+    _wait_for(lambda: new in fm.ready and not env.eng._swap_pending)
+    assert fm.downloads == [(MODEL, new)] and fm.removed == []
+    c.close()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_model_change_during_move_is_downloaded_after(env: Env, monkeypatch: pytest.MonkeyPatch,
+                                                      fail: bool) -> None:
+    """Модель сменили во время переноса: её загрузка ждёт слот «model» и начинается, когда
+    перенос его освобождает, — в новую папку после удачного переноса, в прежнюю после
+    неудачного. Перезагрузка из новой папки не прошла (распознаёт прежняя модель) — старая
+    копия перенесённой модели остаётся."""
+    fm = FakeModels(monkeypatch, env)
+    fm.gate.clear()
+    if fail:
+        fm.move_error = fetch.FetchError("Недостаточно места на диске для модели large-v3-turbo")
+    new = new_folder(env)
+    c = env.client()
+    c.mark()
+    assert c.call("model_dir_set", {"path": new, "move": True})["moving"] is True
+    c.wait_event("progress", lambda d: d["pct"] == 10.0)
+    c.call("set_settings", {"patch": {"model": "small"}})
+    _wait_for(lambda: env.eng._swap_pending)
+    assert fm.downloads == []            # слот «model» занят переносом
+    fm.gate.set()
+    where = None if fail else new
+    _wait_for(lambda: fm.downloads == [("small", where)])
+    _wait_for(lambda: not env.eng._swap_pending and where in fm.where("small")
+              and env.rec.loaded and env.eng._model_phase == "ready")
+    _wait_for(lambda: not env.eng._moving)
+    assert c.wait_event("notice", lambda d: "Скачиваю модель small" in d["text"],
+                        fresh=False)["toast"]
+    assert fm.downloads == [("small", where)] and fm.removed == []
+    assert c.call("get_settings")["model_dir"] == ("" if fail else new)
+    if not fail:
+        c.wait_event("notice", lambda d: "старая копия оставлена" in d["text"], fresh=False)
+    c.close()
+
+
+def real_model_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Настоящий поиск модели (фикстура env подменяет его на «всегда есть»); сеть — нельзя."""
+    monkeypatch.setattr(fetch, "model_ready",
+                        lambda model, cache_dir=None: fetch.model_path(model, cache_dir) is not None)
+
+    def no_download(*a: Any, **kw: Any) -> str:
+        raise AssertionError("модель уже есть — качать нечего")
+
+    monkeypatch.setattr(fetch, "download_model", no_download)
+
+
+def use_model_folder(env: Env, c: Any, folder: Path) -> None:
+    c.call("set_settings", {"patch": {"model": REPO, "model_dir": str(folder)}})
+    _wait_for(lambda: env.eng._model_phase == "ready" and env.rec.loaded)
+
+
+def test_model_dir_set_same_folder_via_junction_is_plain_switch(env: Env,
+                                                                monkeypatch: pytest.MonkeyPatch
+                                                                ) -> None:
+    """Новая папка — та же нынешняя под другим путём (junction): не перенос (он удалил бы
+    единственную копию), а смена записи."""
+    real_model_ready(monkeypatch)
+    real = env.tmp / "real models"
+    make_cache(real, links=False)
+    alias = env.tmp / "alias"
+    junction(real, alias)
+    c = env.client()
+    use_model_folder(env, c, real)
+    assert c.call("model_dir_set", {"path": str(alias), "move": True}) == {"ok": True,
+                                                                          "moving": False}
+    assert c.call("get_settings")["model_dir"] == str(alias)
+    assert not env.eng._moving
+    assert fetch.model_path(REPO, real) is not None and fetch.model_path(REPO, alias) is not None
+    c.close()
+
+
+def test_model_dir_set_into_junction_of_model_folder_keeps_only_copy(
+        env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """В новой папке models--org--name — junction на папку модели в нынешней: «уже там»,
+    а старая копия — это она же: не удаляется, перенос считается удачным."""
+    real_model_ready(monkeypatch)
+    real, new = env.tmp / "real", env.tmp / "new"
+    make_cache(real, links=False)
+    junction(real / FOLDER, new / FOLDER)
+    c = env.client()
+    use_model_folder(env, c, real)
+    c.mark()
+    assert c.call("model_dir_set", {"path": str(new), "move": True})["moving"] is True
+    n = c.wait_event("notice", lambda d: "перенесена в" in d["text"] or d["level"] != "info")
+    assert n["text"] == f"Модель перенесена в {new}" and n["level"] == "info"
+    _wait_for(lambda: not env.eng._moving)
+    assert c.call("get_settings")["model_dir"] == str(new)
+    assert snapshot_files(real / FOLDER) == FILES
+    assert fetch.model_path(REPO, real) is not None and fetch.model_path(REPO, new) is not None
+    c.close()
+
+
 # ---------------------------- подбор модели ----------------------------
 
-def hw(gpu: str | None, vram: int | None, cuda: int, ram: float, threads: int
-       ) -> recommend.Hardware:
-    return recommend.Hardware(gpu, vram, cuda, ram, threads)
+def hw(gpu: str | None, vram: int | None, cuda: int, ram: float, threads: int,
+       types: frozenset[str] | None = None) -> recommend.Hardware:
+    return recommend.Hardware(gpu, vram, cuda, ram, threads, types)
+
+
+# Что CTranslate2 умеет на картах (get_supported_compute_types("cuda"))
+AMPERE = frozenset({"float32", "int8", "int8_float32", "int8_float16", "float16", "bfloat16",
+                    "int8_bfloat16"})
+TURING = frozenset({"float32", "int8", "int8_float32", "int8_float16", "float16"})
+PASCAL = frozenset({"float32", "int8", "int8_float32"})       # GTX 10xx, GT 1030 (CC 6.1)
+MAXWELL = frozenset({"float32"})                              # GTX 9xx, GT 710 (Kepler)
 
 
 @pytest.mark.parametrize("h,want,reason", [
     (hw("NVIDIA GeForce RTX 3060 Ti", 8192, 1, 31.9, 16), ("large-v3-turbo", "cuda", "float16"),
      "Видеокарта RTX 3060 Ti, 8 ГБ — лучшая модель для русского работает быстро"),
-    (hw("NVIDIA GeForce GTX 1650", 4096, 1, 16, 8), ("large-v3-turbo", "cuda", "float16"),
+    (hw("NVIDIA GeForce RTX 3060 Ti", 8192, 1, 31.9, 16, AMPERE),
+     ("large-v3-turbo", "cuda", "float16"), "RTX 3060 Ti, 8 ГБ"),
+    (hw("NVIDIA GeForce GTX 1650", 4096, 1, 16, 8, TURING), ("large-v3-turbo", "cuda", "float16"),
      "GTX 1650, 4 ГБ"),
     (hw("NVIDIA GeForce GTX 1650", 3910, 1, 16, 8), ("large-v3-turbo", "cuda", "float16"),
      "GTX 1650, 3,8 ГБ"),
-    (hw("NVIDIA GeForce GTX 1060 3GB", 3072, 1, 16, 8),
+    (hw("NVIDIA GeForce GTX 1650", 3072, 1, 16, 8, TURING),
      ("large-v3-turbo", "cuda", "int8_float16"), "экономном режиме"),
-    (hw("NVIDIA GeForce GT 1030", 2048, 1, 8, 4), ("large-v3-turbo", "cuda", "int8_float16"),
-     "GT 1030, 2 ГБ"),
-    (hw("NVIDIA GeForce GT 710", 1024, 1, 8, 4), ("small", "cuda", "int8_float16"),
+    (hw("NVIDIA GeForce MX450", 1536, 1, 8, 4, TURING), ("small", "cuda", "int8_float16"),
      "видеопамяти мало"),
-    # драйвер есть, а CUDA карту пока не видит (cuBLAS не скачан и т. п.) — карта считается
-    (hw("NVIDIA GeForce RTX 4070", 12282, 0, 32, 20), ("large-v3-turbo", "cuda", "float16"),
-     "RTX 4070, 12 ГБ"),
+    # Pascal: float16 и int8_float16 CTranslate2 на них не берёт (не подменяет, а падает) —
+    # int8 на той же карте
+    (hw("NVIDIA GeForce GTX 1060 6GB", 6144, 1, 16, 8, PASCAL), ("large-v3-turbo", "cuda", "int8"),
+     "Видеокарта GTX 1060 6GB не поддерживает половинную точность (float16) — модель "
+     "large-v3-turbo работает на ней в режиме int8"),
+    (hw("NVIDIA GeForce GTX 1060 3GB", 3072, 1, 16, 8, PASCAL),
+     ("large-v3-turbo", "cuda", "int8"), "режиме int8"),
+    (hw("NVIDIA GeForce GT 1030", 2048, 1, 8, 4, PASCAL), ("large-v3-turbo", "cuda", "int8"),
+     "GT 1030"),
+    (hw("NVIDIA Quadro P400", 1024, 1, 8, 4, PASCAL), ("small", "cuda", "int8"), "Quadro P400"),
+    (hw(None, None, 1, 16, 8, PASCAL), ("large-v3-turbo", "cuda", "int8"), "режиме int8"),
+    # ни float16, ни int8 (Maxwell, Kepler) — правила для процессора, с честной причиной
+    (hw("NVIDIA GeForce GT 710", 1024, 1, 8, 4, MAXWELL), ("base", "cpu", "int8"),
+     "Видеокарта GT 710 для распознавания не подходит (слишком старая для CTranslate2), "
+     "компьютер скромный (4 потока, 8 ГБ памяти)"),
+    (hw("NVIDIA GeForce GTX 970", 4096, 1, 16, 16, MAXWELL), ("small", "cpu", "int8"),
+     "GTX 970 для распознавания не подходит"),
+    # драйвер (NVML) карту видит, а CUDA — нет (драйвер слишком старый для CUDA 12): на ней
+    # модель не запустится — правила для процессора (cuBLAS тут ни при чём)
+    (hw("NVIDIA GeForce RTX 4070", 12282, 0, 32, 20), ("small", "cpu", "int8"),
+     "Видеокарта RTX 4070 для распознавания не подходит (CUDA её не видит: возможно, устарел "
+     "драйвер NVIDIA) — на процессоре (20 потоков, 32 ГБ памяти)"),
+    (hw("NVIDIA GeForce GTX 760", 2048, 0, 8, 4), ("base", "cpu", "int8"), "CUDA её не видит"),
     # CUDA видит карту, а NVML — нет: объём неизвестен
     (hw(None, None, 1, 16, 8), ("large-v3-turbo", "cuda", "int8_float16"),
      "Видеокарта NVIDIA, объём видеопамяти не определён"),
     (hw(None, None, 0, 16, 16), ("small", "cpu", "int8"), "16 потоков, 16 ГБ памяти"),
     (hw(None, None, 0, 7.8, 8), ("small", "cpu", "int8"), "8 потоков, 7,8 ГБ памяти"),
+    (hw(None, None, 0, 8, 12), ("small", "cpu", "int8"), "12 потоков, 8 ГБ памяти"),
     (hw(None, None, 0, 0, 8), ("small", "cpu", "int8"), "объём памяти не определён"),
     (hw(None, None, 0, 16, 4), ("base", "cpu", "int8"), "4 потока"),
     (hw(None, None, 0, 4, 12), ("base", "cpu", "int8"), "компьютер скромный"),
@@ -798,6 +1135,65 @@ def test_recommend_reason_in_english() -> None:
                         "English runs fast")
     assert "16 threads, 4 GB of RAM" in recommend.choose(hw(None, None, 0, 4, 16)).reason
     assert "1 thread," in recommend.choose(hw(None, None, 0, 4, 1)).reason
+    assert recommend.choose(hw("NVIDIA GeForce GTX 1060 6GB", 6144, 1, 16, 8, PASCAL)).reason == (
+        "GTX 1060 6GB graphics card does not support half precision (float16) — the "
+        "large-v3-turbo model runs on it in int8 mode")
+    assert recommend.choose(hw("NVIDIA GeForce RTX 4070", 12282, 0, 32, 20)).reason.startswith(
+        "The RTX 4070 graphics card cannot be used for recognition (CUDA does not see it")
+
+
+def test_ram_gb_prefers_installed_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Память — установленная: у 8-гигабайтного ноутбука со встроенной графикой Windows видит
+    ≈7,35 ГБ, а это всё-таки «8 ГБ» (small, а не base)."""
+    usable = int(7.35 * 2**30)
+    monkeypatch.setattr(recommend, "_installed_ram_kb", lambda: 8 * 1048576)
+    monkeypatch.setattr(recommend, "_usable_ram_bytes", lambda: usable)
+    assert recommend.ram_gb() == 8.0
+    c = recommend.choose(hw(None, None, 0, recommend.ram_gb(), 12))
+    assert (c.model, c.device) == ("small", "cpu") and "8 ГБ памяти" in c.reason
+    # установленную не узнать (виртуальная машина) — та, что видит Windows
+    monkeypatch.setattr(recommend, "_installed_ram_kb", lambda: None)
+    assert recommend.ram_gb() == 7.3 or recommend.ram_gb() == 7.4
+    monkeypatch.setattr(recommend, "_usable_ram_bytes", lambda: None)
+    assert recommend.ram_gb() == 0.0
+
+
+def test_ram_readers_on_this_windows() -> None:
+    installed, usable = recommend._installed_ram_kb(), recommend._usable_ram_bytes()
+    assert usable is not None and usable > 2**29
+    if installed is not None:                  # в виртуальной машине бывает None
+        assert installed * 1024 >= usable * 0.9
+
+
+def test_cuda_compute_types() -> None:
+    types = asr.cuda_compute_types()
+    if asr.cuda_device_count() < 1:
+        assert types is None
+    else:
+        assert types is not None and "float32" in types
+
+
+def test_model_recommend_uses_card_compute_types(env: Env,
+                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(engine, "gpu_info", lambda: ("NVIDIA GeForce GTX 1060 6GB", 6144))
+    monkeypatch.setattr(engine, "cuda_device_count", lambda: 1)
+    monkeypatch.setattr(engine, "cuda_compute_types", lambda: PASCAL)
+    monkeypatch.setattr(fetch, "model_sizes", lambda repos, budget_s=4.0: {})
+    c = env.client()
+    assert c.call("model_recommend")["recommended"] == {"model": "large-v3-turbo",
+                                                        "device": "cuda", "compute_type": "int8"}
+    c.close()
+
+
+def test_progress_sizes_match_model_list() -> None:
+    """Размер модели в списке мастера (size_mb, МБ по 10⁶ байт) и в прогрессе загрузки или
+    переноса — одно и то же число."""
+    for exact in (75_538_270, 486_212_372, 1_621_806_436, 3_087_284_237):
+        assert fetch._mb(exact) == i18n.fmt_num(round(exact / 1_000_000))
+    assert fetch._mb(486_212_372) == "486"
+    assert fetch._gb(1_621_806_436) == "1,6"
+    i18n.set_language("en")
+    assert fetch._mb(1_546_000_000) == "1,546"
 
 
 @pytest.fixture
@@ -882,6 +1278,7 @@ def test_ram_gb_reads_windows() -> None:
 def test_model_recommend_ws(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(engine, "gpu_info", lambda: ("NVIDIA GeForce RTX 3060 Ti", 8192))
     monkeypatch.setattr(engine, "cuda_device_count", lambda: 1)
+    monkeypatch.setattr(engine, "cuda_compute_types", lambda: None)
     monkeypatch.setattr(recommend, "ram_gb", lambda: 31.9)
     monkeypatch.setattr(os, "cpu_count", lambda: 16)
     monkeypatch.setattr(fetch, "model_sizes", lambda repos, budget_s=4.0: {})
@@ -901,6 +1298,8 @@ def test_model_recommend_ws(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     c.close()
 
 
-def test_long_commands_include_recommend() -> None:
+def test_long_commands_include_recommend_and_model_dir_set() -> None:
+    """model_recommend ждёт сеть и NVML, model_dir_set — диск (недоступный сетевой путь —
+    десятки секунд): очередь команд соединения они не держат."""
     from rupor import server
-    assert "model_recommend" in server.LONG_COMMANDS
+    assert {"model_recommend", "model_dir_set"} <= server.LONG_COMMANDS

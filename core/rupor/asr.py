@@ -424,6 +424,20 @@ def cuda_device_count() -> int:
         return 0
 
 
+def cuda_compute_types() -> frozenset[str] | None:
+    """Точности, которые CTranslate2 умеет на первой видеокарте CUDA (float16 и int8_float16 —
+    от Volta, CC 7.0; int8 — от CC 6.1); None — CUDA карты не видит или узнать не вышло.
+    cuBLAS для этого не нужен (он грузится только с моделью) — работает и до его загрузки."""
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() < 1:
+            return None
+        return frozenset(str(t) for t in ctranslate2.get_supported_compute_types("cuda"))
+    except Exception:
+        log.debug("get_supported_compute_types", exc_info=True)
+        return None
+
+
 class _NvmlMemory(ctypes.Structure):
     _fields_ = [("total", ctypes.c_ulonglong), ("free", ctypes.c_ulonglong),
                 ("used", ctypes.c_ulonglong)]

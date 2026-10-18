@@ -1356,7 +1356,12 @@ export class MockBackend implements Backend {
         const path = this.checkModelDir(a.path, cmd);
         const from = this.modelDir();
         const to = path || HF_CACHE;
-        if (dirKey(from) === dirKey(to)) return { ok: true, moving: false };
+        if (dirKey(from) === dirKey(to)) {
+          // как ядро: та же папка в другой записи (явный путь кэша по умолчанию → "") —
+          // сохранить без переноса и перезагрузки
+          if (path !== this.settings.model_dir) this.applySettings({ model_dir: path });
+          return { ok: true, moving: false };
+        }
         if (this.modelJob) throw new BackendError(this.tx.modelBusy, cmd);
         if (a.move && this.modelReady()) {
           this.moveModel(path, from, to);

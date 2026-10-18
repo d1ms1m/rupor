@@ -49,6 +49,7 @@ import threading
 import time
 import dataclasses
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Protocol
 
 import numpy as np
@@ -57,7 +58,8 @@ from . import (ai, audio, broadcast, config, credman, duck, fetch, fuzzy, i18n, 
                learn, recommend, sounds, spell, textproc, uia, vocab, winutil)
 from . import _win
 from ._win import VK_RIGHT
-from .asr import SAMPLE_RATE, ModelMissing, Recognizer, Result, cuda_device_count, gpu_info
+from .asr import (SAMPLE_RATE, ModelMissing, Recognizer, Result, cuda_compute_types,
+                  cuda_device_count, gpu_info)
 from .config import MODE_AUTO, MODE_CLIPBOARD, MODE_TYPE, Settings
 from .hotkeys import (Action, Chord, GestureMachine, KeyboardHook, KeyGroup, Kind, key_group,
                       parse_chord, parse_ptt)
@@ -540,6 +542,8 @@ class Engine:
         # Идёт перенос модели в другую папку (model_dir_set с move): занят слот "model"
         # в _downloading — загрузка модели в это время не начнётся
         self._moving = False
+        # Загрузку модели просили, пока слот "model" держал перенос: повторить после него
+        self._model_dl_deferred = False
         # Новая модель качается, а распознаёт прежняя: по окончании скачивания — подменить
         self._swap_pending = False
         self._elevated = winutil.self_elevated()
@@ -1222,7 +1226,8 @@ class Engine:
         """Модель под мощность компьютера для мастера: видеокарта, память, потоки процессора
         → {recommended, reason, options} (recommend.py). Не дольше ≈5 с: размеры моделей
         с Hugging Face, не успели — запасные."""
-        return recommend.recommend(recommend.hardware(gpu_info(), cuda_device_count()))
+        return recommend.recommend(recommend.hardware(gpu_info(), cuda_device_count(),
+                                                      cuda_compute_types()))
 
     def model_dir_set(self, path: str, move: bool) -> dict[str, Any]:
         """Сменить папку моделей (model_dir). path "" — кэш HuggingFace по умолчанию.
@@ -1232,19 +1237,33 @@ class Engine:
         папки, старая копия удаляется (notice). Распознавание всё это время работает на
         загруженной модели; ошибка — progress с error, настройки и модель прежние.
         Иначе — как смена настройки: модель есть в новой папке — перезагрузка оттуда, нет —
-        скачивается туда (прежняя распознаёт, пока новая не готова)."""
+        скачивается туда (прежняя распознаёт, пока новая не готова).
+        Та же папка, записанная иначе (явный путь кэша по умолчанию и "", junction, ссылка,
+        subst, сетевой диск и его UNC-путь), — только сохранить новую запись: переносить и
+        удалять нечего. Папка внутри папки самой модели или .locks — ошибка.
+
+        Команда сама трогает диск (папка, пробный файл; недоступный сетевой путь — десятки
+        секунд), поэтому она в server.LONG_COMMANDS: очередь команд соединения не держит."""
         try:
             new = config.normalize_model_dir(path)
         except ValueError as e:
             raise ValueError(f"{config.label('model_dir')}: {e}") from None
         old = self.s.model_dir
-        src, dst = fetch.model_cache_dir(old), fetch.model_cache_dir(new)
-        if fetch.same_dir(src, dst):
+        if new == old:
             return {"ok": True, "moving": False}
         if self._moving:   # сразу, не трогая диск (под замком — ещё раз ниже)
             raise ValueError(tr("eng.model_dir_busy"))
-        fetch.check_writable_dir(dst)
+        src, dst = fetch.model_cache_dir(old), fetch.model_cache_dir(new)
+        if fetch.same_dir(src, dst):
+            # Та же папка под другой записью: перенос «в неё» и удаление «старой» копии
+            # стёрли бы единственную. Сохранить запись (например, явный путь по умолчанию → "")
+            log.info("Папка моделей %s — та же, что %s: меняю только запись", dst, src)
+            self.update_settings({"model_dir": new})
+            return {"ok": True, "moving": False}
         model = self.s.model
+        # до создания папки: внутри папки модели её создавать незачем
+        fetch.check_move_target(model, old or None, new or None)
+        fetch.check_writable_dir(dst)
         movable = move and not os.path.isdir(model) and fetch.model_ready(model, old or None)
         with self._lock:
             if self._moving:
@@ -1254,6 +1273,7 @@ class Engine:
                     raise ValueError(tr("eng.model_dir_busy"))
                 self._downloading.add("model")
                 self._moving = True
+                self._model_dl_deferred = False
         if not movable:
             self.update_settings({"model_dir": new})
             return {"ok": True, "moving": False}
@@ -1303,6 +1323,15 @@ class Engine:
                 # удалились бы обе копии. Слот загрузки освобождается сразу.
                 self._moving = moved
                 self._downloading.discard("model")
+                # Модель сменили во время переноса: её загрузка не началась — слот «model»
+                # был занят (и notice не показан), а повторить некому: перенос, в отличие от
+                # загрузки, не ставит model_downloaded. Повторить теперь, когда слот свободен:
+                # задание идёт после перезагрузки, которую уже поставила смена model_dir
+                # (качается в действующую папку — новую после удачного переноса, прежнюю
+                # после неудачного). Уже не нужно — оно ничего не делает.
+                deferred, self._model_dl_deferred = self._model_dl_deferred, False
+            if deferred:
+                self._jobs.put(("model_downloaded", None))
         self.bus.emit("progress", what="model", pct=100.0, text=tr("eng.model_moved_progress"),
                       done=True, error=None)
         # перезагрузка из новой папки уже в очереди (смена model_dir); старую копию — после неё
@@ -1313,24 +1342,53 @@ class Engine:
         self.bus.emit("progress", what="model", pct=pct, text=error, done=True, error=error)
 
     def _model_moved(self, model: str, old: str, new: str) -> None:
-        """Модель уже распознаёт из новой папки — удалить старую копию (в фоне, диктовки не
-        ждут) и сообщить. До конца удаления новый model_dir_set — «переносится» (_moving)."""
+        """Перезагрузка из новой папки уже прошла (задание reload — раньше в очереди).
+
+        Удалась — модель распознаёт из новой папки: удалить старую копию (в фоне, диктовки не
+        ждут) и сообщить. Не удалась (модель не загрузилась, в новой папке её не стало,
+        модель или папку за это время сменили) — старую копию оставить: она может оказаться
+        единственной рабочей (warn). Старая и новая копии — одни и те же файлы (junction,
+        ссылка) — не удалять: это и есть новая. До конца удаления новый model_dir_set —
+        «переносится» (_moving)."""
+        reloaded = (self.rec.loaded and self._model_phase == "ready" and not self._swap_pending
+                    and self.s.model == model and self.s.model_dir == new
+                    and fetch.model_ready(model, new or None))
+        if not reloaded:
+            with self._lock:
+                self._moving = False
+            folder = self._model_folder_text(model, old)
+            log.warning("Модель %s из новой папки %s не загрузилась — старая копия оставлена: %s",
+                        model, fetch.model_cache_dir(new), folder)
+            self.notice(tr("eng.model_old_kept", path=folder), level="warn")
+            return
+
         def remove() -> None:
             try:
-                ok = fetch.remove_model(model, old or None)
+                if fetch.shares_files(model, old or None, new or None):
+                    log.warning("Старая и новая копии модели %s — одни и те же файлы (%s и %s): "
+                                "не удаляю", model, fetch.model_cache_dir(old),
+                                fetch.model_cache_dir(new))
+                    ok = True
+                else:
+                    ok = fetch.remove_model(model, old or None)
             finally:
                 with self._lock:
                     self._moving = False
             if ok:
                 self.notice(tr("eng.model_moved", path=fetch.model_cache_dir(new)), toast=True)
                 return
-            try:
-                folder = fetch.model_folder(model, old or None)
-            except fetch.FetchError:
-                folder = fetch.model_cache_dir(old)
-            self.notice(tr("eng.model_old_not_removed", path=folder), level="warn")
+            self.notice(tr("eng.model_old_not_removed", path=self._model_folder_text(model, old)),
+                        level="warn")
 
         threading.Thread(target=remove, name="rupor-model-rm", daemon=True).start()
+
+    @staticmethod
+    def _model_folder_text(model: str, model_dir: str) -> Path:
+        """Папка модели в model_dir для сообщений (неизвестная модель — сама папка моделей)."""
+        try:
+            return fetch.model_folder(model, model_dir or None)
+        except fetch.FetchError:
+            return fetch.model_cache_dir(model_dir)
 
     def setup_download(self, what: str) -> None:
         """Скачать модель или библиотеки CUDA в фоне; прогресс — событиями progress."""
@@ -1338,6 +1396,9 @@ class Engine:
             raise ValueError(tr("err.what_download"))
         with self._lock:
             if what in self._downloading:
+                if what == "model" and self._moving:
+                    # слот держит перенос модели: загрузка начнётся после него (_move_model)
+                    self._model_dl_deferred = True
                 return
             self._downloading.add(what)
         threading.Thread(target=self._download, args=(what,), name=f"rupor-dl-{what}",

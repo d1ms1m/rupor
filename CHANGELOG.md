@@ -6,6 +6,47 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-10-18
+
+### Fixed
+
+- **The setup wizard no longer swaps the model you are downloading.** Clicking *Download*
+  before the suggestion for your computer arrived (a few seconds on a computer without an NVIDIA
+  card) let the suggestion replace the model afterwards: the first model was downloaded for
+  nothing and the step asked to download again. *Download* now keeps the model shown, and a
+  wizard started again from Settings never replaces the model chosen there.
+- **Model folder: progress and errors stay in step with what is running.** After a failed move,
+  a later model download showed the old move error instead of its own progress; a double-click
+  on *Move* reported a false "the model is being moved" error and lost track of the real move;
+  a failed download is now shown instead of disappearing; in the wizard, the result of an
+  earlier move no longer appears on the model row after another folder is picked.
+- **"Default" works when the model folder was set to the default path by hand.** It now
+  switches the setting back to the default (following `HF_HOME` / `HF_HUB_CACHE`) instead of
+  doing nothing.
+- **Moving the model can no longer delete its only copy.** A new folder that is the current one
+  under another path (a junction or symbolic link, a `subst` drive, a mapped drive and its UNC
+  path, another letter case) is recognised: only the setting is saved, nothing is moved or
+  deleted. A folder inside the model's own folder or in `.locks` is refused. The old copy is
+  deleted only after the model has really loaded from the new folder, and never when the two
+  copies are the same files.
+- **An incomplete copy in the new folder is completed instead of trusted.** If the new folder
+  already held the model without some of its files (for example `preprocessor_config.json`,
+  left out by an older tool), the move now copies the missing files rather than deleting the
+  complete old copy.
+- **A model chosen while another one is being moved gets downloaded.** It used to stay "not
+  downloaded" until Rupor restarted; the download now starts when the move ends (into the new
+  folder, or into the old one if the move failed).
+- **Better suggestions for older NVIDIA cards and 8 GB laptops.** The wizard only suggests a
+  precision the card supports: `int8` on GTX 10xx cards, which cannot run `float16`, and the
+  processor on older cards. A card that CUDA cannot see (the driver is too old) no longer
+  counts. RAM is the installed amount, so an 8 GB laptop with integrated graphics counts as
+  8 GB and gets `small`.
+- **The same model shows the same size everywhere.** Download and move progress and the
+  free-space messages now use the same megabytes (10⁶ bytes) as the model list: `small` is
+  "486 MB" in both places, not 486 in the list and 464 in the progress line.
+- **An unreachable network folder no longer freezes the window.** Checking the new model folder
+  (about 20 s for an offline NAS) no longer holds up the other commands from the window.
+
 ## [0.4.2] — 2026-10-18
 
 ### Added
@@ -153,6 +194,7 @@ First public release.
 - Tray icon, start with Windows, light and dark themes, first-run wizard; a per-user NSIS
   installer without administrator rights.
 
+[0.4.3]: https://github.com/listapad2024/rupor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/listapad2024/rupor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/listapad2024/rupor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/listapad2024/rupor/compare/v0.3.0...v0.4.0

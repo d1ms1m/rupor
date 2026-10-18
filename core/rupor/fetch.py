@@ -75,14 +75,18 @@ def user_agent() -> str:
     return f"Rupor/{_version()}"
 
 
+# Размеры в текстах — мегабайты и гигабайты по 10⁶ и 10⁹ байт, как на сайте Hugging Face и
+# в списке моделей мастера (recommend.options → size_mb, fmtMb в интерфейсе): у одной и той
+# же модели в списке и в прогрессе загрузки или переноса — одно и то же число.
+
 def _mb(n: float) -> str:
-    """Байты → мебибайты по правилам языка интерфейса: «1 234» / «1,234»."""
-    return i18n.fmt_num(n / 1048576)
+    """Байты → мегабайты (10⁶ байт) по правилам языка интерфейса: «1 234» / «1,234»."""
+    return i18n.fmt_num(n / 1_000_000)
 
 
 def _gb(n: float) -> str:
-    """Байты → гибибайты с одним знаком: «1,5» / «1.5»."""
-    return i18n.fmt_num(n / 1073741824, 1)
+    """Байты → гигабайты (10⁹ байт) с одним знаком: «1,5» / «1.5»."""
+    return i18n.fmt_num(n / 1_000_000_000, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -624,10 +628,77 @@ def model_cache_dir(model_dir: str | Path | None) -> Path:
     return Path(os.path.abspath(_hf_cache_dir(model_dir or None)))
 
 
+def _real(path: str | Path) -> str:
+    """Настоящий путь для сравнения: ссылки, junction, subst и сетевой диск раскрыты
+    (os.path.realpath; несуществующий хвост пути остаётся как есть), регистр не важен."""
+    p = os.fspath(path)
+    try:
+        return os.path.normcase(os.path.realpath(p))
+    except (OSError, ValueError):
+        return os.path.normcase(os.path.abspath(p))
+
+
+def _same_file(a: str | Path, b: str | Path) -> bool | None:
+    """Один и тот же файл или папка на диске (номер тома и файла, ссылки раскрываются);
+    None — не узнать: пути нет или файловая система не даёт номеров файлов (0)."""
+    try:
+        sa, sb = os.stat(a), os.stat(b)
+    except (OSError, ValueError):
+        return None
+    if not sa.st_ino or not sb.st_ino:
+        return None
+    return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
 def same_dir(a: str | Path, b: str | Path) -> bool:
-    """Одна и та же папка (без учёта регистра и вида записи пути)."""
-    return (os.path.normcase(os.path.abspath(os.fspath(a)))
-            == os.path.normcase(os.path.abspath(os.fspath(b))))
+    """Одна и та же папка: без учёта регистра и вида записи пути, а также та же папка под
+    другим путём — junction, символьная ссылка, subst, сетевой диск и его UNC-путь (иначе
+    «перенос» в неё и удаление «старой» копии стёрли бы единственную)."""
+    a, b = os.fspath(a), os.fspath(b)
+    if os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b)):
+        return True
+    same = _same_file(a, b)
+    if same is not None:
+        return same
+    return _real(a) == _real(b)       # одной из папок ещё нет — по настоящему пути
+
+
+def _within(path: str | Path, root: str | Path) -> bool:
+    """path — сама папка root или что-то внутри неё (по настоящим путям, через ссылки)."""
+    p, r = _real(path), _real(root)
+    try:
+        if os.path.commonpath([p, r]) == r:
+            return True
+    except ValueError:  # другой диск или UNC — сверим по номерам папок ниже
+        pass
+    # Та же папка под путём, который realpath не сводит к локальному (\\localhost\C$\…,
+    # сетевой диск на эту же машину): сама папка или её родитель — root по номеру тома и файла.
+    cur = os.path.abspath(os.fspath(path))
+    while True:
+        if os.path.exists(cur) and _same_file(cur, root):
+            return True
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return False
+        cur = parent
+
+
+def check_move_target(model: str, src_dir: str | Path | None,
+                      dst_dir: str | Path | None) -> None:
+    """Новая папка dst_dir — не внутри папки самой модели в src_dir (models--org--name) и не
+    внутри папки замков .locks: копия легла бы в то, что потом удаляет remove_model, и
+    пропали бы обе. Нельзя — FetchError. Модель, заданная своей папкой, и неизвестная модель
+    (её папки в кэше нет) не проверяются."""
+    if os.path.isdir(model):
+        return
+    try:
+        name = _repo_folder(repo_id(model))
+    except FetchError:
+        return
+    src, dst = _hf_cache_dir(src_dir), _hf_cache_dir(dst_dir)
+    for root in (src / name, src / _LOCKS_DIR):
+        if _within(dst, root):
+            raise FetchError(tr("fetch.move_into_model", path=dst, folder=root))
 
 
 def check_writable_dir(path: str | Path) -> Path:
@@ -859,12 +930,22 @@ def _move_locks(src: Path, dst: Path, name: str, rename: bool) -> None:
         log.debug("Замки модели не перенесены (%s): %s", name, e)
 
 
+def _has_files_of(snap: Path, other: Path) -> bool:
+    """В снимке snap есть все файлы снимка other (по именам)."""
+    try:
+        return all((snap / f.name).is_file() for f in other.iterdir() if f.is_file())
+    except OSError:
+        return False
+
+
 def move_model(model: str, src_dir: str | Path | None, dst_dir: str | Path | None,
                on_progress: ProgressFn) -> str:
     """Перенести модель из кэша src_dir в кэш dst_dir (None — кэш HuggingFace по умолчанию)
     и вернуть путь к её папке в dst_dir. Исходная копия не удаляется (это remove_model).
 
-    * в dst_dir модель уже целиком — ничего не копируется;
+    * dst_dir внутри папки самой модели в src_dir или внутри .locks — FetchError
+      (check_move_target);
+    * в dst_dir модель уже целиком (все файлы исходного снимка) — ничего не копируется;
     * тот же том, а папки модели в dst_dir нет — мгновенное переименование;
     * другой том — копия во временную папку «models--<org>--<имя>.rupor-tmp» и переименование (прерванная
       копия никогда не выглядит полной); прогресс — по байтам, как у загрузки. Относительные
@@ -881,11 +962,16 @@ def move_model(model: str, src_dir: str | Path | None, dst_dir: str | Path | Non
             return str(found)
         name = _repo_folder(repo_id(model))
         src, dst = _hf_cache_dir(src_dir), _hf_cache_dir(dst_dir)
+        check_move_target(model, src, dst)
         ready = model_path(model, dst)
-        if ready is not None:
+        have = model_path(model, src)
+        if ready is not None and (have is None or _has_files_of(ready, have)):
             rep.emit(100.0, tr("fetch.move_already", model=model, path=dst), force=True)
             return str(ready)
-        if same_dir(src, dst) or model_path(model, src) is None:
+        # Неполная копия в новой папке (нет файла, который есть в исходной: старый
+        # huggingface_hub или другая программа не докачали preprocessor_config.json) — не
+        # «уже там»: дополняется копией ниже, иначе удалилась бы полная исходная
+        if same_dir(src, dst) or have is None:
             raise FetchError(tr("fetch.move_no_model", model=model, path=src))
         check_writable_dir(dst)
         src_folder, dst_folder = src / name, dst / name
@@ -985,6 +1071,41 @@ def remove_model(model: str, cache_dir: str | Path | None) -> bool:
     if ok:
         log.info("Модель %s удалена из %s", model, cache)
     return ok
+
+
+def shares_files(model: str, old_dir: str | Path | None, new_dir: str | Path | None) -> bool:
+    """remove_model(model, old_dir) задело бы копию модели в new_dir: это одна и та же папка
+    под разными путями (junction или ссылка на кэш или на саму models--org--name), копия
+    лежит внутри удаляемых папок или её файлы — те же файлы, что в old_dir (жёсткие ссылки,
+    ссылки по абсолютному пути на старые блобы). Тогда удалять старую копию нельзя: это и есть
+    новая. Копии в new_dir нет — False; не узнать (ошибка чтения) — True."""
+    if os.path.isdir(model):
+        return True      # модель задана своей папкой: её не удаляют никогда
+    try:
+        name = _repo_folder(repo_id(model))
+    except FetchError:
+        return True
+    old, new = _hf_cache_dir(old_dir), _hf_cache_dir(new_dir)
+    doomed = (old / name, old / _LOCKS_DIR / name)
+    try:
+        if same_dir(old, new) or same_dir(old / name, new / name):
+            return True
+        snap = model_path(model, new)
+        if snap is None:
+            return False
+        if any(_within(snap, d) for d in doomed):
+            return True
+        old_snap = model_path(model, old)
+        for f in snap.iterdir():
+            if any(_within(f, d) for d in doomed):     # ссылка ведёт в старую папку
+                return True
+            if old_snap is not None and _same_file(f, old_snap / f.name):
+                return True
+    except OSError as e:
+        log.warning("Не узнать, общие ли файлы у копий модели %s (%s и %s): %s", model, old,
+                    new, e)
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------

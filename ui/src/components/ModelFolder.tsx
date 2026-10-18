@@ -51,7 +51,15 @@ export function ModelFolder({
   const { settings } = useCore();
   const setup = useLoad(() => call("setup_status"), [settings?.model, settings?.model_dir]);
   const [draft, setDraft] = useState<string | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPendingState] = useState<string | null>(null);
+  // Окно «Перенести модель?» закрывается с анимацией, и всё это время его кнопки живы с
+  // прежним замыканием, где pending — путь. Кнопки читают ref: второй щелчок (двойной по
+  // «Перенести») видит, что первый его уже сбросил
+  const pendingRef = useRef<string | null>(null);
+  const setPending = (p: string | null) => {
+    pendingRef.current = p;
+    setPendingState(p);
+  };
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // Перенос, начатый здесь: все события progress what="model" до done — его (пока модель
@@ -62,7 +70,7 @@ export function ModelFolder({
     moveRef.current = j;
     setMoveState(j);
   };
-  // Загрузка модели, идущая сейчас (не перенос)
+  // Загрузка модели (не перенос): идущая или неудавшаяся (done с error)
   const [dl, setDl] = useState<Job | null>(null);
 
   useEvent("progress", (p) => {
@@ -72,7 +80,10 @@ export function ModelFolder({
       // удачный перенос: тост «Модель перенесена…» пришлёт ядро, здесь полоса просто уходит
       setMove(p.done && !p.error ? null : job);
     } else {
-      setDl(p.done ? null : job);
+      // пошла загрузка — итог прошлого переноса к ней не относится, полоса — её
+      if (moveRef.current) setMove(null);
+      // удачная загрузка уходит, ошибка остаётся до новой загрузки, смены модели или папки
+      setDl(p.done && !p.error ? null : job);
     }
     if (p.done) {
       setup.reload();
@@ -85,14 +96,18 @@ export function ModelFolder({
     setDl(null);
   });
   // Удачный перенос ядро закрепляет новым model_dir (событие settings): полоса уходит, даже
-  // если последнее событие progress потерялось
+  // если последнее событие progress потерялось. Итог прошлого переноса или загрузки (ошибка)
+  // к другой модели или папке не относится
   const modelDir = settings?.model_dir;
-  const lastDir = useRef(modelDir);
+  const model = settings?.model;
+  const last = useRef({ modelDir, model });
   useEffect(() => {
-    if (lastDir.current === modelDir) return;
-    lastDir.current = modelDir;
-    if (moveRef.current && !moveRef.current.done) setMove(null);
-  }, [modelDir]);
+    const dirChanged = last.current.modelDir !== modelDir;
+    if (!dirChanged && last.current.model === model) return;
+    last.current = { modelDir, model };
+    if (moveRef.current && (dirChanged || moveRef.current.done)) setMove(null);
+    setDl((d) => (d?.done ? null : d));
+  }, [modelDir, model]);
 
   if (!settings) return null;
   const st = setup.data;
@@ -106,9 +121,13 @@ export function ModelFolder({
 
   const send = async (path: string, doMove: boolean) => {
     setPending(null);
+    // Перенос отсюда ещё идёт: второй ядро отклонило бы («переносится»), а catch ниже сбросил
+    // бы полосу настоящего переноса
+    if (doMove && moveRef.current && !moveRef.current.done) return;
     setErr(null);
     setSending(true);
-    // прошлая неудача переноса больше не показывается
+    // прошлая неудача переноса или загрузки больше не показывается
+    setDl((d) => (d?.done ? null : d));
     if (doMove) setMove({ pct: 0, text: t("modelFolder.moving"), error: null, done: false });
     else if (moveRef.current?.done) setMove(null);
     try {
@@ -133,6 +152,9 @@ export function ModelFolder({
     const target = path === "" ? st.model_dir_default : path;
     if (samePath(target, st.model_dir)) {
       setDraft(null);
+      // «По умолчанию», а в настройке явный путь к той же папке: переносить нечего, сохраняем
+      // "" — папка снова следует за HF_HOME / HF_HUB_CACHE
+      if (path === "" && settings.model_dir !== "") void send("", false);
       return;
     }
     if (st.model_ready) setPending(path);
@@ -149,6 +171,12 @@ export function ModelFolder({
     } catch (e) {
       setErr(t("modelFolder.changeFailed", { error: errorText(e) }));
     }
+  };
+
+  /** Кнопка окна переноса: путь — из pendingRef (см. выше), не из замыкания. */
+  const confirmMove = (doMove: boolean) => {
+    const path = pendingRef.current;
+    if (path !== null) void send(path, doMove);
   };
 
   const job = move ?? (showDownloads ? dl : null);
@@ -275,10 +303,10 @@ export function ModelFolder({
             <Button variant="ghost" onClick={() => setPending(null)}>
               {t("common.cancel")}
             </Button>
-            <Button variant="secondary" onClick={() => pending !== null && void send(pending, false)}>
+            <Button variant="secondary" onClick={() => confirmMove(false)}>
               {t("modelFolder.noMove")}
             </Button>
-            <Button variant="primary" autoFocus onClick={() => pending !== null && void send(pending, true)}>
+            <Button variant="primary" autoFocus onClick={() => confirmMove(true)}>
               {t("modelFolder.move")}
             </Button>
           </>
