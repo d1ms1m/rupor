@@ -179,7 +179,7 @@ type Usage = { calls: number; tokens_in: number; tokens_out: number; cost_usd: n
 // у today/week/month/total ещё unknown_cost_calls: успешные вызовы с неизвестной ценой
 // (claude -p по подписке, модель Anthropic не из таблицы цен) — в cost_usd их нет ($0),
 // UI может написать «цена неизвестна», а не «$0»
-type UsageSpan = Usage & { unknown_cost_calls: number };
+type UsageSpan = Usage & { unknown_cost_calls: number; estimated_cost_calls?: number };
 type AiUsageStats = {
   today: UsageSpan; week: UsageSpan /* 7 дней, включая сегодня */; month: UsageSpan /* 30 дней */;
   total: UsageSpan;
@@ -257,16 +257,22 @@ type Stats = {
   "accent": "#7c5cff",
   "first_run_done": false,
   "ai_enabled": false,
-  "ai_provider": "openrouter",      // openrouter | anthropic | ollama
+  "ai_provider": "openrouter",      // openrouter | anthropic | ollama | openai_compatible
   "ai_model": "anthropic/claude-haiku-4.5",
   "anthropic_model": "claude-haiku-4-5",
   "ollama_model": "qwen2.5:7b",
   "ollama_url": "http://127.0.0.1:11434",
+  "openai_base_url": "",           // HTTP(S)-адрес до /chat/completions, включая /v1 при необходимости
+  "openai_model": "",              // ID модели; пустые URL/модель требуют настройки перед вызовом
+  "openai_extra_json": "{}",        // JSON-объект дополнительных параметров запроса
+  "openai_input_price": null,       // USD / 1M токенов; null — неизвестно, 0 — бесплатно
+  "openai_output_price": null,
+  "openai_cached_input_price": null, // null — тариф входа
   "ai_provider_order": [],          // OpenRouter provider.order, напр. ["amazon-bedrock","anthropic"]
   "ai_mode": "wait",                // wait | raw_first
   "ai_min_words": 6,
   "ai_timeout_s": 5,
-  "command_provider": "openrouter", // openrouter | claude_cli
+  "command_provider": "openrouter", // любой ai_provider или claude_cli
   "env_path": "",                   // путь к .env с openrouter_api_key (необязательно)
   "learn_mode": "auto",             // обучение словаря на правках: auto | suggest | off
   "dict_fuzzy": true,               // словарь: узнавать похожие написания терминов по звучанию
@@ -328,7 +334,9 @@ CREATE TABLE vocab(word TEXT NOT NULL, app TEXT NOT NULL DEFAULT '', count INTEG
 CREATE INDEX vocab_app ON vocab(app);
 CREATE TABLE vocab_excluded(word TEXT PRIMARY KEY);            -- casefold + «ё»→«е» слова;
                                                                -- действует на все его формы
-PRAGMA user_version = 3;
+-- версия 4: расчёт по ручным тарифам, фиксируется на момент вызова
+ALTER TABLE ai_usage ADD COLUMN cost_estimated INTEGER NOT NULL DEFAULT 0;
+PRAGMA user_version = 4;
 ```
 
 Миграции — `storage._MIGRATIONS` (SQL или функция Python на шаг); миграция 2 → 3 только
@@ -515,7 +523,8 @@ def version() -> str; def selftest() -> tuple[bool, str]
 ```python
 def read(target: str) -> str | None; def write(target: str, secret: str, user: str = "Rupor") -> None
 def delete(target: str) -> None
-TARGETS = {"openrouter": "Rupor/openrouter", "anthropic": "Rupor/anthropic"}
+TARGETS = {"openrouter": "Rupor/openrouter", "anthropic": "Rupor/anthropic",
+           "openai_compatible": "Rupor/openai_compatible"}
 def read_env_key(path: str, name: str = "openrouter_api_key") -> str | None
 def mask(key: str) -> str      # "sk-or-v1-…XYZ"
 ```
@@ -938,6 +947,16 @@ volume(), muted(), set_volume(v), set_muted(m)`) — `CoreAudioBackend` или �
   время, `ok`, `error_kind` (`AIError.kind` или имя исключения), процесс окна. Ошибка —
   `ok=0`, стоимость 0, модель — из настроек (`ai.provider_model`). «Как есть» (без сети) не
   пишется. После записи — событие `ai_usage` с суммой за сегодня.
+- `openai_compatible` использует общие HTTP-таймауты и разбор Chat Completions с OpenRouter.
+  Ключ необязателен; заданный ключ хранится как `Rupor/openai_compatible`. JSON расширяет
+  параметры тела запроса, но не может менять `model`, `messages`, `stream`, `n`, ключи,
+  заголовки и настройки соединения. `usage.cost` считается суммой USD от сервера; если его
+  нет, ручные тарифы входа/выхода и статистика токенов дают расчётную сумму. Кэш берётся
+  из `prompt_tokens_details.cached_tokens` или `prompt_cache_hit_tokens`. Неизвестные
+  тарифы/токены оставляют `cost_usd=NULL`. Признак `cost_estimated` хранится в SQLite;
+  `estimated_cost_calls` в today/week/month/total появляется при наличии расчётных вызовов.
+  Результат `ai_test` дополнительно содержит `cost_estimated: true` для расчётной суммы.
+  Исторические записи не пересчитываются при смене тарифов.
 - `ai_balance`: `ai.check_openrouter_key` (OpenRouter `/key` + `/credits`), кэш 5 минут
   (неудачная проверка — 1 минута), `force` — мимо кэша, смена ключа сбрасывает кэш. Нет
   ключа — `error` «Ключ OpenRouter не задан — добавьте его в Настройках → ИИ», сеть не

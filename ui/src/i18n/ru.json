@@ -554,6 +554,7 @@
     "invalid": "Ключ не прошёл проверку",
     "placeholderOpenrouter": "sk-or-v1-…",
     "placeholderAnthropic": "sk-ant-…",
+    "placeholderCompatible": "API-ключ вашего провайдера",
     "manualHint": "Ключ сразу уходит в Credential Manager и больше нигде не показывается.",
     "envTitle": "Импорт из файла .env",
     "envPlaceholder": "Путь к .env с openrouter_api_key, необязательно",
@@ -757,8 +758,10 @@
       "providers": {
         "openrouter": "OpenRouter",
         "anthropic": "Anthropic",
-        "ollama": "Ollama (офлайн)"
+        "ollama": "Ollama (офлайн)",
+        "openai_compatible": "OpenAI API"
       },
+      "openaiProviderHint": "Для сервисов с OpenAI-совместимым API, например DeepSeek.",
       "key": "Ключ API",
       "keyHint": "Ключ OpenRouter. Никогда не выводится в интерфейс, логи и историю.",
       "keyHintAnthropic": "Ключ Anthropic API для прямых запросов без OpenRouter.",
@@ -783,7 +786,21 @@
       "commandOpenrouter": "OpenRouter",
       "commandOpenrouterText": "Та же модель и ключ, что и для очистки.",
       "commandCli": "Claude Code CLI",
-      "commandCliText": "Локальная команда «claude -p», таймаут 30 секунд."
+      "commandCliText": "Локальная команда «claude -p», таймаут 30 секунд.",
+      "openaiUrl": "Базовый адрес",
+      "openaiUrlHint": "Адрес API до /chat/completions. Добавьте /v1, если этого требует сервис. Общий для очистки и командного режима.",
+      "openaiModelHint": "Идентификатор модели у провайдера. Пример DeepSeek: deepseek-flash.",
+      "openaiKeyHint": "Хранится в диспетчере учётных данных Windows. Необязателен для серверов без авторизации. Ключ отправляется по настроенному адресу.",
+      "openaiExtra": "Дополнительные параметры запроса (JSON)",
+      "openaiExtraHint": "JSON-объект, сохраняется кнопкой ниже. Пример DeepSeek: отключение рассуждений. Модель, сообщения, потоковый режим, ключи и настройки соединения переопределять нельзя. Не указывайте здесь ключи.",
+      "openaiPrices": "Ручные тарифы, USD за миллион токенов",
+      "openaiPricesHint": "Для расчёта укажите цены входа и выхода. Пустое поле — цена неизвестна, 0 — бесплатно. Для кэшированного входа по умолчанию используется цена входа. Стоимость из API имеет приоритет. Расчёт использует тарифы на момент запроса; обновляйте их при смене модели или сервиса.",
+      "openai_input_price": "Вход",
+      "openai_output_price": "Выход",
+      "openai_cached_input_price": "Вход из кэша",
+      "priceUnset": "Не задан",
+      "priceInvalid": "Введите конечное неотрицательное число.",
+      "commandOpenaiText": "Та же модель, ключ и параметры, что и для очистки."
     },
     "history": {
       "title": "История диктовок",
@@ -890,6 +907,9 @@
     }
   },
   "aiUsage": {
+    "estimated": "Расчётная стоимость",
+    "includesEstimates": "Суммы, график и средние значения включают расчётную стоимость по ручным тарифам. Фактическое списание у провайдера может отличаться.",
+    "includesUnknown": "Есть вызовы с неизвестной стоимостью. Они не входят в денежные суммы.",
     "title": "Расход",
     "hint": "Каждый запрос к ИИ записывается на этом компьютере: токены и цена по данным провайдера. Неудачные запросы — тоже, с ценой $0.",
     "refresh": "Обновить баланс",

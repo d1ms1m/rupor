@@ -36,9 +36,9 @@ MODE_CLIPBOARD = "clipboard"  # всегда через буфер
 INSERT_MODES = (MODE_AUTO, MODE_TYPE, MODE_CLIPBOARD)
 
 THEMES = ("system", "dark", "light")
-AI_PROVIDERS = ("openrouter", "anthropic", "ollama")
+AI_PROVIDERS = ("openrouter", "anthropic", "ollama", "openai_compatible")
 AI_MODES = ("wait", "raw_first")
-COMMAND_PROVIDERS = ("openrouter", "claude_cli", "anthropic", "ollama")
+COMMAND_PROVIDERS = ("openrouter", "claude_cli", "anthropic", "ollama", "openai_compatible")
 DEVICES = ("cuda", "cpu")
 # Обучение словаря на правках: auto — добавлять сразу (с «Отменить»), suggest — предлагать
 # (повторная такая же правка добавляется сама), off — не следить за полем
@@ -182,6 +182,12 @@ class Settings:
     anthropic_model: str = "claude-haiku-4-5"
     ollama_model: str = "qwen2.5:7b"
     ollama_url: str = "http://127.0.0.1:11434"
+    openai_base_url: str = ""
+    openai_model: str = ""
+    openai_extra_json: str = "{}"
+    openai_input_price: float | None = None
+    openai_output_price: float | None = None
+    openai_cached_input_price: float | None = None
     ai_provider_order: list[str] = field(default_factory=list)
     ai_mode: str = "wait"               # wait | raw_first
     ai_min_words: int = 6
@@ -401,6 +407,45 @@ def normalize_model_dir(v: Any) -> str:
     return out
 
 
+def _openai_url(v: Any) -> str:
+    from urllib.parse import urlsplit
+    s = _text(allow_empty=True, max_len=2000)(v)
+    if not s:
+        return s
+    try:
+        u = urlsplit(s)
+        u.port  # validate port syntax/range
+        valid = (u.scheme in ("http", "https") and u.hostname and not u.username
+                 and not u.password and not u.query and not u.fragment
+                 and not any(c.isspace() or ord(c) < 32 for c in s))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError(tr("cfg.openai_url"))
+    return s.rstrip("/")
+
+
+def _openai_extra(v: Any) -> str:
+    s = _text(allow_empty=True, max_len=16000)(v) or "{}"
+    try:
+        obj = json.loads(s)
+        # Reject NaN/Infinity, including values produced by exponent overflow.
+        json.dumps(obj, allow_nan=False)
+    except (ValueError, RecursionError):
+        raise ValueError(tr("cfg.openai_json")) from None
+    if not isinstance(obj, dict):
+        raise ValueError(tr("cfg.openai_json"))
+    reserved = {"model", "messages", "stream", "n", "api_key", "authorization",
+                "base_url", "headers", "extra_headers", "stream_options"}
+    if any(k.lower() in reserved for k in obj):
+        raise ValueError(tr("cfg.openai_reserved"))
+    return s
+
+
+def _price_or_none(v: Any) -> float | None:
+    return None if v is None else _float(0, 1_000_000)(v)
+
+
 def _mode_or_none(v: Any) -> str | None:
     if v is None or v == "":
         return None
@@ -597,6 +642,12 @@ _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "anthropic_model": _text(max_len=200),
     "ollama_model": _text(max_len=200),
     "ollama_url": _url,
+    "openai_base_url": _openai_url,
+    "openai_model": _text(allow_empty=True, max_len=200),
+    "openai_extra_json": _openai_extra,
+    "openai_input_price": _price_or_none,
+    "openai_output_price": _price_or_none,
+    "openai_cached_input_price": _price_or_none,
     "ai_provider_order": _str_list(20),
     "ai_mode": _choice(AI_MODES),
     "ai_min_words": _int(0, 1000),

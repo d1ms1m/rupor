@@ -427,5 +427,15 @@
   "tray.status_paused": "Paused",
   "tray.status_processing": "Transcribing…",
   "tray.status_recording": "Recording",
-  "tray.style": "AI style"
+  "tray.style": "AI style",
+  "cfg.openai_url": "expected an HTTP(S) base URL without credentials, query or fragment",
+  "cfg.openai_json": "expected a JSON object with finite numbers",
+  "cfg.openai_reserved": "JSON cannot override model, messages, stream, n, credentials, headers or connection settings",
+  "ai.openai_not_configured": "Set the OpenAI-compatible API base URL and model in Settings → AI",
+  "setting.openai_base_url": "Base URL",
+  "setting.openai_model": "Model ID from your provider. DeepSeek example: deepseek-flash.",
+  "setting.openai_extra_json": "Additional request parameters (JSON)",
+  "setting.openai_input_price": "Input",
+  "setting.openai_output_price": "Output",
+  "setting.openai_cached_input_price": "Cached input"
 }

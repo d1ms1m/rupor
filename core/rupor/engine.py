@@ -1724,6 +1724,8 @@ class Engine:
     # ---------- ИИ ----------
 
     def _has_key(self, provider: str) -> bool:
+        if provider == "openai_compatible":
+            return True  # локальные совместимые серверы могут не требовать авторизацию
         target = credman.TARGETS.get(provider)
         if target is None:
             return True  # ollama — без ключа
@@ -1789,6 +1791,7 @@ class Engine:
             "tokens_in": r.tokens_in if r is not None else None,
             "tokens_out": r.tokens_out if r is not None else None,
             "cost_usd": r.cost_usd if r is not None else 0.0,
+            "cost_estimated": r.cost_estimated if r is not None else False,
             "ms": round(r.ms if r is not None and r.ms else ms), "ok": err is None,
             "error_kind": None if err is None else (
                 err.kind if isinstance(err, ai.AIError) else type(err).__name__),

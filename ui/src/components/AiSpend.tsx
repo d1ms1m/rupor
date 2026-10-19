@@ -24,6 +24,12 @@ const costOf = (d: AiUsageDay) => d.cost_usd;
 /** Как в предупреждении ядра: меньше $1 — пора пополнить. */
 const LOW_BALANCE = 1;
 
+function usageFoot(v: AiUsageTotals): string {
+  return [tp("units.calls", v.calls),
+    v.estimated_cost_calls ? t("aiUsage.estimated") : "",
+    v.unknown_cost_calls ? t("styles.sandbox.costUnknown") : ""].filter(Boolean).join(" · ");
+}
+
 function DayTip({ d }: { d: AiUsageDay }) {
   return (
     <span className="flex flex-col">
@@ -78,7 +84,7 @@ export function AiHomeCard() {
       ? settings.anthropic_model
       : settings.ai_provider === "ollama"
         ? settings.ollama_model
-        : settings.ai_model;
+        : settings.ai_provider === "openai_compatible" ? settings.openai_model : settings.ai_model;
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.05 }}>
@@ -111,13 +117,13 @@ export function AiHomeCard() {
               label={t("aiUsage.periods.today")}
               loading={!s}
               value={s?.today.cost_usd ?? 0}
-              foot={s ? tp("units.calls", s.today.calls) : ""}
+              foot={s ? usageFoot(s.today) : ""}
             />
             <Metric
               label={t("aiUsage.periods.month")}
               loading={!s}
               value={s?.month.cost_usd ?? 0}
-              foot={s ? tp("units.calls", s.month.calls) : ""}
+              foot={s ? usageFoot(s.month) : ""}
             />
             {showBalance && (
               <div className="min-w-[96px]">
@@ -190,7 +196,7 @@ function AiOffCard() {
     setBusy(true);
     try {
       const provider = settings.ai_provider;
-      if (provider !== "ollama") {
+      if (provider !== "ollama" && provider !== "openai_compatible") {
         const st = await call("ai_key_status", { provider: provider as KeyProvider });
         if (!st.has_key) {
           navigate("settings/ai");
@@ -248,6 +254,8 @@ export function AiSpendSection() {
     <section data-testid="ai-spend">
       <SectionTitle hint={t("aiUsage.hint")}>{t("aiUsage.title")}</SectionTitle>
       <div className="space-y-3">
+        {!!s?.total.estimated_cost_calls && <p className="text-[12.5px] text-muted">{t("aiUsage.includesEstimates")}</p>}
+        {!!s?.total.unknown_cost_calls && <p className="text-[12.5px] text-muted">{t("aiUsage.includesUnknown")}</p>}
         {showBalance && <BalanceCard balance={ai.balance} loading={ai.balanceLoading} now={now} />}
 
         {!s && ai.statsError ? (
@@ -333,6 +341,8 @@ function PeriodTile({
       <div className="text-[12.5px] font-medium text-muted">{label}</div>
       <div className="mt-1 text-[24px] font-semibold leading-tight tracking-[-0.02em] text-fg">
         {v ? <CountUp value={v.cost_usd} format={fmtSpend} /> : <Skeleton className="mt-1 h-7 w-16" />}
+        {!!v?.estimated_cost_calls && <div className="text-[11.5px] font-normal text-muted">{t("aiUsage.estimated")}</div>}
+        {!!v?.unknown_cost_calls && <div className="text-[11.5px] font-normal text-muted">{t("styles.sandbox.costUnknown")}</div>}
       </div>
       <div className="mt-1.5 space-y-0.5 text-[12px] text-subtle">
         {v ? (

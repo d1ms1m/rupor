@@ -14,10 +14,10 @@ export type CoreStateName =
 
 export type InsertMode = "auto" | "type" | "clipboard";
 export type ThemeMode = "system" | "dark" | "light";
-export type AiProvider = "openrouter" | "anthropic" | "ollama";
-export type KeyProvider = "openrouter" | "anthropic";
+export type AiProvider = "openrouter" | "anthropic" | "ollama" | "openai_compatible";
+export type KeyProvider = "openrouter" | "anthropic" | "openai_compatible";
 export type AiMode = "wait" | "raw_first";
-export type CommandProvider = "openrouter" | "claude_cli" | "anthropic" | "ollama";
+export type CommandProvider = AiProvider | "claude_cli";
 export type ClearPeriod = "day" | "week" | "month" | "all";
 /** Словарь учится на правках: auto — сразу добавлять, suggest — спрашивать, off — выключено. */
 export type LearnMode = "auto" | "suggest" | "off";
@@ -242,6 +242,12 @@ export interface Settings {
   ai_provider: AiProvider;
   ai_model: string;
   anthropic_model: string;
+  openai_base_url: string;
+  openai_model: string;
+  openai_extra_json: string;
+  openai_input_price: number | null;
+  openai_output_price: number | null;
+  openai_cached_input_price: number | null;
   ollama_model: string;
   ollama_url: string;
   ai_provider_order: string[];
@@ -365,6 +371,7 @@ export interface AiUsageTotals {
   cost_usd: number;
   /** Удачные вызовы с неизвестной ценой модели (cost 0, в avg_cost_per_call не входят). */
   unknown_cost_calls?: number;
+  estimated_cost_calls?: number;
 }
 
 export interface AiUsageDay {
@@ -423,6 +430,7 @@ export interface KeyCheck {
 }
 
 export interface AiTestResult {
+  cost_estimated?: boolean;
   text: string;
   ms: number;
   cost_usd: number | null;

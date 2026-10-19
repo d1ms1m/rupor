@@ -235,7 +235,9 @@ export function aiTrayLine(s: AiUsageSnapshot, withBalance: boolean): string | n
   if (!s.stats) return null;
   const today = fmtSpend(s.stats.today.cost_usd);
   const b = withBalance ? balanceValue(s.balance) : null;
-  return b !== null ? t("tray.aiLine", { today, balance: fmtUsd(b) }) : t("tray.aiLineToday", { today });
+  const line = b !== null ? t("tray.aiLine", { today, balance: fmtUsd(b) }) : t("tray.aiLineToday", { today });
+  return [line, s.stats.today.estimated_cost_calls ? t("aiUsage.estimated") : "",
+    s.stats.today.unknown_cost_calls ? t("styles.sandbox.costUnknown") : ""].filter(Boolean).join(" · ");
 }
 
 /**

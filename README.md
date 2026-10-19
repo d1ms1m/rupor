@@ -357,11 +357,22 @@ Settings → AI.
 
 - **Provider.** The default is [OpenRouter](https://openrouter.ai) with
   `anthropic/claude-haiku-4.5` (you can change the model). The Anthropic API directly (with your
-  own key) and [Ollama](https://ollama.com) — a local model, fully offline — are supported too.
+  own key), [Ollama](https://ollama.com) — a local model, fully offline — and a configurable
+  **OpenAI-compatible API** are supported too. For the latter, enter the base URL before
+  `/chat/completions`, the model and an optional key. DeepSeek example: `https://api.deepseek.com`,
+  `deepseek-flash`, extra JSON `{"thinking":{"type":"disabled"}}`. These placeholders are examples,
+  not active defaults. Cleanup and command mode share these settings but select providers
+  independently. Include `/v1` in the URL if your service requires it. Extra JSON cannot override
+  the model, messages, streaming or authentication.
+- **Manual tariffs** for the compatible API are USD per million input, output and cached-input
+  tokens. Set both input and output prices to estimate costs; blank means unknown and `0` means
+  free. Cached input uses the input tariff unless specified. API-reported `usage.cost` takes
+  precedence; otherwise costs are marked as estimated. Historical costs and their provenance
+  persist when settings change. Update tariffs manually when changing models, services or prices.
   You need **your own account** with the provider: requests are billed to your balance. One
   cleanup costs around $0.001 (measurements are in [docs/BENCH.md](docs/BENCH.md)).
 - **The key** is stored only in Windows Credential Manager (entries `Rupor/openrouter`,
-  `Rupor/anthropic`). Paste it in Settings or import it from a `.env` file with an
+  `Rupor/anthropic`, `Rupor/openai_compatible`). Paste it in Settings or import it from a `.env` file with an
   `openrouter_api_key` variable. The interface shows only a mask like `sk-or-v1-…XYZ`; the key
   never gets into logs or history.
 - **Styles**: As is (no AI), Standard, Business, Chat message, Code / prompt. The style comes
@@ -407,7 +418,7 @@ OpenRouter. With Ollama everything stays on your computer.
 | Volume of lowered apps (only while recording) | `%APPDATA%\Rupor\duck.json` |
 | Speech model | `%USERPROFILE%\.cache\huggingface\hub` or your own folder (`model_dir`, see [Model folder](#model-folder)) |
 | CUDA libraries | `%LOCALAPPDATA%\Rupor\cuda` |
-| AI keys | Windows Credential Manager: `Rupor/openrouter`, `Rupor/anthropic` |
+| AI keys | Windows Credential Manager: `Rupor/openrouter`, `Rupor/anthropic`, `Rupor/openai_compatible` |
 
 ## Settings
 
@@ -444,7 +455,9 @@ Everything is configured in the Rupor window. You can also edit
 | `history_enabled`, `history_retention_days` | history and how long to keep it (0 — forever) |
 | `default_style`, `ai_enabled`, `ai_provider`, `ai_model`, `ai_mode`, `ai_min_words`, `ai_timeout_s` | AI cleanup |
 | `ai_provider_order` | preferred providers inside OpenRouter, e.g. `["google-vertex", "amazon-bedrock"]` |
-| `command_provider` | command mode: `openrouter` or `claude_cli` |
+| `command_provider` | command mode: `openrouter`, `claude_cli`, `anthropic`, `ollama`, `openai_compatible` |
+| `openai_base_url`, `openai_model`, `openai_extra_json` | compatible API address, model and extra JSON parameters |
+| `openai_input_price`, `openai_output_price`, `openai_cached_input_price` | manual USD-per-million tariffs; `null` means unset |
 | `env_path` | path to a `.env` file with `openrouter_api_key` for importing the key; optional, empty by default |
 | `theme`, `accent`, `pill_enabled`, `pill_position`, `sounds` | appearance, the indicator, sounds |
 

@@ -94,6 +94,9 @@ _MIGRATIONS: tuple[tuple[Migration, ...], ...] = (
         # частоты по истории считает пересборка после миграции (_vocab_check_version):
         # у движка — в фоне, чтобы большая история не задерживала запуск ядра
     ),
+    (  # 3 → 4: происхождение стоимости, сохраняется вместе с вызовом
+        "ALTER TABLE ai_usage ADD COLUMN cost_estimated INTEGER NOT NULL DEFAULT 0",
+    ),
 )
 SCHEMA_VERSION = len(_MIGRATIONS)
 
@@ -1022,7 +1025,8 @@ class Storage:
             "app": _str(rec.get("app")),
         }
         cols = ("ts", "kind", "provider", "model", "upstream", "tokens_in", "tokens_out",
-                "cost_usd", "ms", "ok", "error_kind", "app")
+                "cost_usd", "ms", "ok", "error_kind", "app", "cost_estimated")
+        row["cost_estimated"] = bool(ok and cost is not None and rec.get("cost_estimated", False))
         with self._tx() as c:
             cur = c.execute(f"INSERT INTO ai_usage({', '.join(cols)}) "
                             f"VALUES({', '.join('?' * len(cols))})",
@@ -1042,7 +1046,8 @@ class Storage:
 
     def ai_usage_stats(self, today: date | None = None) -> dict[str, Any]:
         """Сводка расхода ИИ (WS ai_usage_stats): today / week (7 дней) / month (30 дней) /
-        total — {calls, tokens_in, tokens_out, cost_usd, unknown_cost_calls}; avg_cost_per_call
+        total — {calls, tokens_in, tokens_out, cost_usd, unknown_cost_calls,
+        estimated_cost_calls?}; avg_cost_per_call
         — средняя стоимость успешного вызова с известной ценой; daily — ровно 30 дней
         с нулями; by_kind — все виды (cleanup, command, test) за всё время; by_model —
         модели за всё время, дорогие первыми (+ unknown_cost_calls).
@@ -1066,6 +1071,9 @@ class Storage:
             ok_row = self._conn.execute(
                 "SELECT count(*), total(cost_usd) FROM ai_usage "
                 "WHERE ok = 1 AND cost_usd IS NOT NULL").fetchone()
+            estimates = self._conn.execute(
+                "SELECT date(ts, 'unixepoch', 'localtime') AS d, count(*) AS n "
+                "FROM ai_usage WHERE cost_estimated = 1 GROUP BY d").fetchall()
         zero: _Sum4 = (0, 0, 0, 0.0)
         by_day: dict[date, _Sum4] = {}
         unknown: dict[date, int] = {}
@@ -1092,6 +1100,13 @@ class Storage:
         def span_unknown(n_days: int) -> int:
             return sum(unknown.get(today - timedelta(days=i), 0) for i in range(n_days))
 
+        estimated_days = {str(r["d"]): int(r["n"]) for r in estimates}
+
+        def estimated_span(n_days: int | None = None) -> dict[str, int]:
+            n = (sum(estimated_days.values()) if n_days is None else
+                 sum(estimated_days.get((today - timedelta(days=i)).isoformat(), 0) for i in range(n_days)))
+            return {"estimated_cost_calls": n} if n else {}
+
         first = today - timedelta(days=DAILY_DAYS - 1)
         daily = [{"date": d.isoformat(), **_pack4(by_day.get(d, zero))}
                  for d in (first + timedelta(days=i) for i in range(DAILY_DAYS))]
@@ -1100,11 +1115,12 @@ class Storage:
         ok_n, ok_cost = int(ok_row[0] or 0), float(ok_row[1] or 0.0)
         return {
             "today": {**_pack4(by_day.get(today, zero)),
-                      "unknown_cost_calls": span_unknown(1)},
-            "week": {**_pack4(span(WEEK_DAYS)), "unknown_cost_calls": span_unknown(WEEK_DAYS)},
+                      "unknown_cost_calls": span_unknown(1), **estimated_span(1)},
+            "week": {**_pack4(span(WEEK_DAYS)), "unknown_cost_calls": span_unknown(WEEK_DAYS),
+                     **estimated_span(WEEK_DAYS)},
             "month": {**_pack4(span(MONTH_DAYS)),
-                      "unknown_cost_calls": span_unknown(MONTH_DAYS)},
-            "total": {**_pack4(total), "unknown_cost_calls": unknown_total},
+                      "unknown_cost_calls": span_unknown(MONTH_DAYS), **estimated_span(MONTH_DAYS)},
+            "total": {**_pack4(total), "unknown_cost_calls": unknown_total, **estimated_span()},
             "avg_cost_per_call": round(ok_cost / ok_n, 6) if ok_n else 0.0,
             "daily": daily,
             "by_kind": [{"kind": k, "calls": kind_map.get(k, (0, 0.0))[0],
