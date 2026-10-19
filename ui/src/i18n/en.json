@@ -546,6 +546,7 @@
     "invalid": "The key didn't pass the check",
     "placeholderOpenrouter": "sk-or-v1-…",
     "placeholderAnthropic": "sk-ant-…",
+    "placeholderCompatible": "API key from your provider",
     "manualHint": "The key goes straight to Credential Manager and is never shown again.",
     "envTitle": "Import from a .env file",
     "envPlaceholder": "Path to a .env with openrouter_api_key (optional)",
@@ -749,8 +750,10 @@
       "providers": {
         "openrouter": "OpenRouter",
         "anthropic": "Anthropic",
-        "ollama": "Ollama (offline)"
+        "ollama": "Ollama (offline)",
+        "openai_compatible": "OpenAI API"
       },
+      "openaiProviderHint": "For services with an OpenAI-compatible API, such as DeepSeek.",
       "key": "API key",
       "keyHint": "Your OpenRouter key. Never shown in the interface, logs or history.",
       "keyHintAnthropic": "An Anthropic API key for direct requests without OpenRouter.",
@@ -775,7 +778,21 @@
       "commandOpenrouter": "OpenRouter",
       "commandOpenrouterText": "The same model and key as cleanup.",
       "commandCli": "Claude Code CLI",
-      "commandCliText": "The local “claude -p” command, 30-second timeout."
+      "commandCliText": "The local “claude -p” command, 30-second timeout.",
+      "openaiUrl": "Base URL",
+      "openaiUrlHint": "API address before /chat/completions. Include /v1 if your service requires it. Shared by cleanup and command mode.",
+      "openaiModelHint": "Model ID from your provider. DeepSeek example: deepseek-flash.",
+      "openaiKeyHint": "Stored in Windows Credential Manager. Optional for servers without authentication. The key is sent to the configured address.",
+      "openaiExtra": "Additional request parameters (JSON)",
+      "openaiExtraHint": "JSON object, saved with the button below. DeepSeek example: disable thinking. Model, messages, streaming, credentials and connection settings cannot be overridden. Do not put keys here.",
+      "openaiPrices": "Manual tariffs, USD per million tokens",
+      "openaiPricesHint": "Set input and output prices to estimate costs. Blank means unknown; 0 means free. Cached input defaults to the input price. API-reported cost takes precedence. Estimates use the tariffs at request time; update them when changing models or providers.",
+      "openai_input_price": "Input",
+      "openai_output_price": "Output",
+      "openai_cached_input_price": "Cached input",
+      "priceUnset": "Not set",
+      "priceInvalid": "Enter a finite non-negative number.",
+      "commandOpenaiText": "The same model, key and parameters as cleanup."
     },
     "history": {
       "title": "Dictation history",
@@ -882,6 +899,9 @@
     }
   },
   "aiUsage": {
+    "estimated": "Estimated cost",
+    "includesEstimates": "Totals, chart and averages include estimates based on manual tariffs. Actual provider charges may differ.",
+    "includesUnknown": "Some calls have unknown costs and are excluded from monetary totals.",
     "title": "Spending",
     "hint": "Every AI request is logged on this computer: tokens and price as reported by the provider. Failed requests too, at $0.",
     "refresh": "Refresh balance",

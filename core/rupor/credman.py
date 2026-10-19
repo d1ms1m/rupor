@@ -22,7 +22,8 @@ from .i18n import tr
 
 log = logging.getLogger(__name__)
 
-TARGETS = {"openrouter": "Rupor/openrouter", "anthropic": "Rupor/anthropic"}
+TARGETS = {"openrouter": "Rupor/openrouter", "anthropic": "Rupor/anthropic",
+           "openai_compatible": "Rupor/openai_compatible"}
 
 CRED_TYPE_GENERIC = 1
 CRED_PERSIST_LOCAL_MACHINE = 2

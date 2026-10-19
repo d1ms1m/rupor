@@ -82,6 +82,42 @@ def test_failed_cleanup_is_recorded_with_zero_cost(env: Env) -> None:
     c.close()
 
 
+def test_compatible_dictation_without_key_and_estimate_tracking(env: Env,
+                                                               monkeypatch: pytest.MonkeyPatch) -> None:
+    c = env.client()
+    c.call("set_settings", {"patch": {"ai_enabled": True, "ai_min_words": 0,
+        "ai_provider": "openai_compatible", "command_provider": "openai_compatible",
+        "openai_base_url": "http://localhost:8080/v1", "openai_model": "local-model"}})
+    assert not env.calls.creds
+    monkeypatch.setattr(ai, "cleanup", lambda *a, **kw: ai.AIResult(
+        "Очищенный текст", 5, 0.002, "openai_compatible", "local-model", cost_estimated=True))
+    c.mark()
+    env.dictate("текст для очистки без ключа")
+    c.wait_event("ai_usage")
+    wait_until(lambda: bool(env.calls.delivered))
+    assert env.calls.delivered[-1][0] == "Очищенный текст "
+    stats = c.call("ai_usage_stats")
+    assert stats["today"]["estimated_cost_calls"] == 1
+    assert usage_rows(env)[0]["cost_estimated"] == 1
+    result = c.call("ai_test", {"text": "проверка", "style": "normal"})
+    assert result["cost_estimated"] is True
+    assert env.calls.balance_checks == []
+    c.close()
+
+
+def test_compatible_key_lifecycle(env: Env) -> None:
+    c = env.client()
+    provider = "openai_compatible"
+    assert c.call("ai_key_status", {"provider": provider})["has_key"] is False
+    c.call("ai_key_set", {"provider": provider, "key": FAKE_KEY})
+    assert env.calls.creds["Rupor/openai_compatible"] == FAKE_KEY
+    assert c.call("ai_key_status", {"provider": provider})["has_key"] is True
+    assert FAKE_KEY not in str(c.call("get_settings"))
+    c.call("ai_key_delete", {"provider": provider})
+    assert c.call("ai_key_status", {"provider": provider})["has_key"] is False
+    c.close()
+
+
 def test_command_and_test_calls_are_recorded(env: Env) -> None:
     c = env.client()
     c.mark()

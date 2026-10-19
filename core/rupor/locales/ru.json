@@ -437,5 +437,15 @@
   "tray.status_paused": "На паузе",
   "tray.status_processing": "Распознаю…",
   "tray.status_recording": "Идёт запись",
-  "tray.style": "Стиль ИИ"
+  "tray.style": "Стиль ИИ",
+  "cfg.openai_url": "ожидается базовый HTTP(S)-адрес без логина, пароля, параметров запроса и фрагмента",
+  "cfg.openai_json": "ожидается JSON-объект с конечными числовыми значениями",
+  "cfg.openai_reserved": "JSON не может переопределять model, messages, stream, n, ключи, заголовки и настройки соединения",
+  "ai.openai_not_configured": "Укажите базовый адрес OpenAI-совместимого API и модель в Настройках → ИИ",
+  "setting.openai_base_url": "Базовый адрес",
+  "setting.openai_model": "Идентификатор модели у провайдера. Пример DeepSeek: deepseek-flash.",
+  "setting.openai_extra_json": "Дополнительные параметры запроса (JSON)",
+  "setting.openai_input_price": "Вход",
+  "setting.openai_output_price": "Выход",
+  "setting.openai_cached_input_price": "Вход из кэша"
 }

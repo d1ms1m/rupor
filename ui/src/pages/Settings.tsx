@@ -37,6 +37,7 @@ import { LearnModePicker } from "../components/Learn";
 import { LevelBar } from "../components/Level";
 import { Logo } from "../components/Logo";
 import { ModelFolder } from "../components/ModelFolder";
+import { OpenAISettings } from "../components/OpenAISettings";
 import { Button, Checkbox, ChipInput, IconButton, Segmented, Slider, Switch } from "../components/ui/controls";
 import { AiSpendSection } from "../components/AiSpend";
 import { Badge, Card, LoadError, PageHeader, SectionTitle, SettingRow, Skeleton } from "../components/ui/display";
@@ -819,9 +820,13 @@ function Ai({ s, set }: SectionProps) {
               options={[
                 { value: "openrouter", label: t("settings.ai.providers.openrouter") },
                 { value: "anthropic", label: t("settings.ai.providers.anthropic") },
+                { value: "openai_compatible", label: t("settings.ai.providers.openai_compatible") },
                 { value: "ollama", label: t("settings.ai.providers.ollama") },
               ]}
             />
+            {s.ai_provider === "openai_compatible" && (
+              <p className="mt-2 text-[12.5px] text-muted">{t("settings.ai.openaiProviderHint")}</p>
+            )}
           </div>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -872,6 +877,7 @@ function Ai({ s, set }: SectionProps) {
                   </SettingRow>
                 </>
               )}
+              {s.ai_provider === "openai_compatible" && <OpenAISettings s={s} set={set} />}
               {s.ai_provider === "ollama" && (
                 <>
                   <SettingRow title={t("settings.ai.ollamaUrl")} description={t("settings.ai.ollamaUrlHint")}>
@@ -917,6 +923,7 @@ function Ai({ s, set }: SectionProps) {
             [
               { v: "openrouter", icon: <Bot />, title: t("settings.ai.commandOpenrouter"), text: t("settings.ai.commandOpenrouterText") },
               { v: "claude_cli", icon: <Terminal />, title: t("settings.ai.commandCli"), text: t("settings.ai.commandCliText") },
+              { v: "openai_compatible", icon: <Bot />, title: t("settings.ai.providers.openai_compatible"), text: t("settings.ai.commandOpenaiText") },
             ] as const
           ).map((o) => {
             const active = s.command_provider === o.v;
@@ -946,6 +953,9 @@ function Ai({ s, set }: SectionProps) {
             );
           })}
         </div>
+        {s.command_provider === "openai_compatible" && s.ai_provider !== "openai_compatible" && (
+          <Card padded={false} className="mt-3"><OpenAISettings s={s} set={set} /></Card>
+        )}
       </section>
     </>
   );

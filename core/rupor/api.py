@@ -22,8 +22,9 @@ from .storage import LEARN_JOURNAL_MAX
 
 log = logging.getLogger(__name__)
 
-KEY_PROVIDERS = tuple(credman.TARGETS)  # openrouter, anthropic
-_PROVIDER_NAMES = {"openrouter": "OpenRouter", "anthropic": "Anthropic"}
+KEY_PROVIDERS = tuple(credman.TARGETS)
+_PROVIDER_NAMES = {"openrouter": "OpenRouter", "anthropic": "Anthropic",
+                   "openai_compatible": "OpenAI-compatible API"}
 
 
 class ApiError(Exception):
@@ -483,7 +484,8 @@ class Api:
             raise ApiError(tr("api.unknown_style", style=style))
         r = self.e.ai_test(text, style)
         return {"text": r.text, "ms": round(r.ms), "cost_usd": r.cost_usd,
-                "provider": r.provider, "model": r.model}
+                "provider": r.provider, "model": r.model,
+                **({"cost_estimated": True} if r.cost_estimated else {})}
 
     def _ai_balance(self, a: dict[str, Any]) -> dict[str, Any]:
         force = a.get("force", False)

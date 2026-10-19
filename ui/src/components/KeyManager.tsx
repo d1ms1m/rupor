@@ -186,7 +186,8 @@ export function KeyManager({ provider, compact }: { provider: KeyProvider; compa
                 autoComplete="off"
                 spellCheck={false}
                 value={keyInput}
-                placeholder={isOR ? t("key.placeholderOpenrouter") : t("key.placeholderAnthropic")}
+                placeholder={isOR ? t("key.placeholderOpenrouter")
+                  : provider === "anthropic" ? t("key.placeholderAnthropic") : t("key.placeholderCompatible")}
                 onChange={(e) => setKeyInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && void saveManual()}
               />

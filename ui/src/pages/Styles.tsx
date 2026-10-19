@@ -280,6 +280,7 @@ function Sandbox() {
                       <Badge icon={<Timer />}>{fmtMs(result.ms)}</Badge>
                       <Badge icon={<Coins />}>
                         {result.cost_usd === null ? t("styles.sandbox.costUnknown") : fmtCost(result.cost_usd)}
+                        {result.cost_estimated && ` · ${t("aiUsage.estimated")}`}
                       </Badge>
                       <Badge icon={<Server />}>{result.provider}</Badge>
                       <Badge>{result.model}</Badge>

@@ -108,7 +108,8 @@ interface UsageRow {
   model: string;
   tokens_in: number;
   tokens_out: number;
-  cost: number;
+  cost: number | null;
+  estimated?: boolean;
   ok: boolean;
 }
 
@@ -277,6 +278,12 @@ const DEFAULT_SETTINGS: Settings = {
   ai_provider: "openrouter",
   ai_model: "anthropic/claude-haiku-4.5",
   anthropic_model: "claude-haiku-4-5",
+  openai_base_url: "",
+  openai_model: "",
+  openai_extra_json: "{}",
+  openai_input_price: null,
+  openai_output_price: null,
+  openai_cached_input_price: null,
   ollama_model: "qwen2.5:7b",
   ollama_url: "http://127.0.0.1:11434",
   ai_provider_order: ["amazon-bedrock", "anthropic"],
@@ -323,6 +330,7 @@ export class MockBackend implements Backend {
   private keys: Record<KeyProvider, string | null> = {
     openrouter: "sk-or-v1-…XYZ",
     anthropic: null,
+    openai_compatible: null,
   };
   private rdpOpen: RdpBase[];
   private usage: UsageRow[] = [];
@@ -766,15 +774,21 @@ export class MockBackend implements Backend {
         ? this.settings.anthropic_model
         : this.settings.ai_provider === "ollama"
           ? this.settings.ollama_model
-          : this.settings.ai_model;
+          : this.settings.ai_provider === "openai_compatible" ? this.settings.openai_model : this.settings.ai_model;
     const row = this.usageRow(Date.now() / 1000, kind, model, words, Math.random);
     if (this.settings.ai_provider === "ollama") row.cost = 0;
+    if (this.settings.ai_provider === "openai_compatible") {
+      const input = this.settings.openai_input_price;
+      const output = this.settings.openai_output_price;
+      row.cost = input === null || output === null ? null : (row.tokens_in * input + row.tokens_out * output) / 1_000_000;
+      row.estimated = row.cost !== null;
+    }
     this.usage.push(row);
-    this.balanceSpent += row.cost;
+    if (this.settings.ai_provider === "openrouter") this.balanceSpent += row.cost ?? 0;
     const today = this.aiStats().today.cost_usd;
     this.hub.emit("ai_usage", {
       kind,
-      cost_usd: row.cost,
+      cost_usd: row.cost ?? 0,
       tokens_in: row.tokens_in,
       tokens_out: row.tokens_out,
       today_cost_usd: today,
@@ -791,7 +805,9 @@ export class MockBackend implements Backend {
       t.calls += 1;
       t.tokens_in += r.tokens_in;
       t.tokens_out += r.tokens_out;
-      t.cost_usd += r.cost;
+      t.cost_usd += r.cost ?? 0;
+      if (r.cost === null) t.unknown_cost_calls = (t.unknown_cost_calls ?? 0) + 1;
+      if (r.estimated) t.estimated_cost_calls = (t.estimated_cost_calls ?? 0) + 1;
     };
     const week = new Set(keys.slice(-7));
     const today = keys[keys.length - 1];
@@ -803,7 +819,7 @@ export class MockBackend implements Backend {
     let okCalls = USAGE_BEFORE.calls;
     let okCost = USAGE_BEFORE.cost_usd;
     for (const r of this.usage) {
-      if (r.ok) {
+      if (r.ok && r.cost !== null) {
         okCalls += 1;
         okCost += r.cost;
       }
@@ -817,11 +833,11 @@ export class MockBackend implements Backend {
       if (k === today) add(tot.today, r);
       const kk = kinds.get(r.kind) ?? { calls: 0, cost_usd: 0 };
       kk.calls += 1;
-      kk.cost_usd += r.cost;
+      kk.cost_usd += r.cost ?? 0;
       kinds.set(r.kind, kk);
       const mm = models.get(r.model) ?? { calls: 0, cost_usd: 0 };
       mm.calls += 1;
-      mm.cost_usd += r.cost;
+      mm.cost_usd += r.cost ?? 0;
       models.set(r.model, mm);
     }
     return {
@@ -1613,14 +1629,15 @@ export class MockBackend implements Backend {
           return {
           text: this.cleanup(a.text, a.style),
           ms,
-          cost_usd: a.style === "as_is" ? 0 : (this.usage[this.usage.length - 1]?.cost ?? 0),
+          cost_usd: a.style === "as_is" ? 0 : (this.usage[this.usage.length - 1]?.cost ?? null),
+          cost_estimated: a.style !== "as_is" && Boolean(this.usage[this.usage.length - 1]?.estimated),
           provider: this.settings.ai_provider === "openrouter" ? "Amazon Bedrock" : this.settings.ai_provider,
           model:
             this.settings.ai_provider === "anthropic"
               ? this.settings.anthropic_model
               : this.settings.ai_provider === "ollama"
                 ? this.settings.ollama_model
-                : this.settings.ai_model,
+                : this.settings.ai_provider === "openai_compatible" ? this.settings.openai_model : this.settings.ai_model,
           };
         });
       }

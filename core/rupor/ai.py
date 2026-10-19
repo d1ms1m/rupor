@@ -1,7 +1,8 @@
 """ИИ-обработка текста: автоочистка диктовки, стили и командный режим.
 
 Провайдеры очистки: OpenRouter (по умолчанию, OpenAI-совместимый API), Anthropic API
-напрямую и Ollama (офлайн). Командный режим — OpenRouter или локальный Claude Code CLI
+напрямую, Ollama (офлайн) и настраиваемый OpenAI-совместимый API. Командный режим —
+те же API-провайдеры или локальный Claude Code CLI
 (``claude -p``); OAuth-токены Claude Code модуль не читает.
 
 Язык промптов: очистка — на языке текста (``text_language``: русский текст — русский
@@ -28,12 +29,13 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from . import credman, i18n
-from .config import Settings
+from .config import Settings, _openai_extra, _openai_url
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +60,12 @@ DEFAULTS: dict[str, Any] = {
     "anthropic_model": "claude-haiku-4-5",
     "ollama_model": "qwen2.5:7b",
     "ollama_url": "http://127.0.0.1:11434",
+    "openai_base_url": "",
+    "openai_model": "",
+    "openai_extra_json": "{}",
+    "openai_input_price": None,
+    "openai_output_price": None,
+    "openai_cached_input_price": None,
     "ai_provider_order": [],
     "ai_timeout_s": 5.0,
     "command_provider": "openrouter",
@@ -249,11 +257,12 @@ class AIResult:
     text: str
     ms: float
     cost_usd: float | None
-    provider: str          # openrouter | anthropic | ollama | claude_cli | none
+    provider: str          # openrouter | anthropic | ollama | openai_compatible | claude_cli | none
     model: str
     upstream: str | None = None     # фактический провайдер у OpenRouter (Amazon Bedrock…)
     tokens_in: int | None = None
     tokens_out: int | None = None
+    cost_estimated: bool = False
 
 
 class AIError(Exception):
@@ -515,17 +524,19 @@ def _urlopen(req: urllib.request.Request, timeout: float, local: bool = False) -
 _SECRET_RE = re.compile(r"(sk-[A-Za-z0-9_-]{20,}|Bearer\s+\S+|x-api-key\S*)", re.IGNORECASE)
 
 
-def _sanitize(msg: str, limit: int = 200) -> str:
+def _sanitize(msg: str, limit: int = 200, secret: str = "") -> str:
+    if secret:
+        msg = str(msg).replace(secret, "•••")
     msg = _SECRET_RE.sub("•••", " ".join(str(msg).split()))
     return msg[:limit] + ("…" if len(msg) > limit else "")
 
 
-def _error_detail(body: bytes) -> tuple[str, int | None]:
+def _error_detail(body: bytes, secret: str = "") -> tuple[str, int | None]:
     """Сообщение и код из JSON-ошибки провайдера (для OpenRouter — error.code)."""
     try:
         data = json.loads(body.decode("utf-8", errors="replace"))
     except ValueError:
-        return _sanitize(body.decode("utf-8", errors="replace")), None
+        return _sanitize(body.decode("utf-8", errors="replace"), secret=secret), None
     if isinstance(data, dict):
         err = data.get("error")
         if isinstance(err, dict):
@@ -535,9 +546,9 @@ def _error_detail(body: bytes) -> tuple[str, int | None]:
             msg = str(err.get("message") or "")
             if isinstance(raw, str) and raw and raw not in msg:
                 msg = f"{msg}: {raw}"
-            return _sanitize(msg), code if isinstance(code, int) else None
+            return _sanitize(msg, secret=secret), code if isinstance(code, int) else None
         if isinstance(err, str):
-            return _sanitize(err), None
+            return _sanitize(err, secret=secret), None
     return "", None
 
 
@@ -568,7 +579,7 @@ def _timeout_error(name: str, seconds: float) -> AIError:
 
 
 def _post_json(name: str, url: str, headers: dict[str, str], body: dict[str, Any] | None,
-               timeout: float, local: bool = False, method: str = "POST") -> dict[str, Any]:
+               timeout: float, local: bool = False, method: str = "POST", secret: str = "") -> dict[str, Any]:
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
     h = {"User-Agent": USER_AGENT, "Accept": "application/json", **headers}
     if data is not None:
@@ -582,19 +593,19 @@ def _post_json(name: str, url: str, headers: dict[str, str], body: dict[str, Any
             err_body = e.read(64_000)
         except Exception:
             err_body = b""
-        detail, _ = _error_detail(err_body)
+        detail, _ = _error_detail(err_body, secret)
         raise _http_error(name, e.code, detail) from None
     except TimeoutError:
         raise _timeout_error(name, timeout) from None
     except urllib.error.URLError as e:
         if isinstance(e.reason, TimeoutError):
             raise _timeout_error(name, timeout) from None
-        reason = _sanitize(str(e.reason), 80)
+        reason = _sanitize(str(e.reason), 80, secret)
         raise AIError(tr("ai.network_local" if local else "ai.network", name=name,
                          reason=reason), "network") from None
     except (OSError, http.client.HTTPException) as e:
         raise AIError(tr("ai.network_error", name=name,
-                         reason=_sanitize(str(e) or type(e).__name__, 80)), "network") from None
+                         reason=_sanitize(str(e) or type(e).__name__, 80, secret)), "network") from None
     except ValueError:
         # http.client отвергает заголовок с переводом строки: в тексте ValueError был бы
         # весь заголовок «Bearer <ключ>» — наружу его не отдаём ни в каком виде
@@ -657,7 +668,8 @@ def normalize_key(key: str | None) -> str | None:
 
 
 def _key(provider: str, api_key: str | None) -> str:
-    name = "OpenRouter" if provider == "openrouter" else "Anthropic"
+    name = {"openrouter": "OpenRouter", "anthropic": "Anthropic",
+            "openai_compatible": "OpenAI-compatible API"}[provider]
     if not api_key:
         try:
             api_key = credman.read(credman.TARGETS[provider])
@@ -668,9 +680,45 @@ def _key(provider: str, api_key: str | None) -> str:
         k = normalize_key(api_key)
     except ValueError:
         raise AIError(tr("ai.key_corrupted", name=name), "auth") from None
-    if not k:
+    if not k and provider != "openai_compatible":
         raise AIError(tr("ai.no_key", name=name), "no_key")
-    return k
+    return k or ""
+
+
+def _token_count(v: Any) -> int | None:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
+def _chat_result(data: dict[str, Any], name: str, provider: str, model: str, ms: float,
+                 secret: str = "") -> AIResult:
+    """Общий ответ Chat Completions: текст, лимит, токены и сообщённая API стоимость."""
+    if data.get("error"):
+        detail, code = _error_detail(json.dumps(data).encode("utf-8"), secret)
+        raise _http_error(name, code or 502, detail)
+    try:
+        choice = data["choices"][0]
+        content = choice["message"]["content"]
+        finish = choice.get("finish_reason")
+    except (KeyError, IndexError, TypeError, AttributeError):
+        raise AIError(tr("ai.no_text", name=name), "bad_response") from None
+    if finish == "length":
+        raise AIError(tr("ai.truncated"), "truncated")
+    if finish == "content_filter":
+        raise AIError(tr("ai.refusal"), "bad_response")
+    if isinstance(content, list):
+        content = "".join(p["text"] for p in content
+                          if isinstance(p, dict) and isinstance(p.get("text"), str))
+    if not isinstance(content, str) or not content.strip():
+        raise AIError(tr("ai.no_text", name=name), "bad_response")
+    usage = data.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    cost = usage.get("cost")
+    cost = (float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool)
+            and math.isfinite(cost) and cost >= 0 else None)
+    return AIResult(text=content, ms=ms, cost_usd=cost, provider=provider,
+                    model=str(data.get("model") or model),
+                    tokens_in=_token_count(usage.get("prompt_tokens")),
+                    tokens_out=_token_count(usage.get("completion_tokens")))
 
 
 def _openrouter(system: str, user: str, s: object, key: str, timeout: float,
@@ -695,32 +743,9 @@ def _openrouter(system: str, user: str, s: object, key: str, timeout: float,
         "X-Title": "Rupor",
     }, body, timeout)
     ms = (time.perf_counter() - t0) * 1000
-    err = data.get("error")
-    if err:
-        detail, code = _error_detail(json.dumps(data).encode("utf-8"))
-        raise _http_error("OpenRouter", code or 502, detail)
-    try:
-        choice = data["choices"][0]
-        content = choice["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        raise AIError(tr("ai.no_text", name="OpenRouter"), "bad_response") from None
-    if isinstance(content, list):  # на всякий случай: массив частей
-        content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
-    if not isinstance(content, str):
-        raise AIError(tr("ai.no_text", name="OpenRouter"), "bad_response")
-    if choice.get("finish_reason") == "length":
-        raise AIError(tr("ai.truncated"), "truncated")
-    usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-    cost = usage.get("cost") if isinstance(usage, dict) else None
-    upstream = data.get("provider")
-    return AIResult(
-        text=content, ms=ms,
-        cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
-        provider="openrouter", model=str(data.get("model") or model),
-        upstream=str(upstream) if upstream else None,
-        tokens_in=usage.get("prompt_tokens") if isinstance(usage, dict) else None,
-        tokens_out=usage.get("completion_tokens") if isinstance(usage, dict) else None,
-    )
+    result = _chat_result(data, "OpenRouter", "openrouter", model, ms)
+    result.upstream = str(data["provider"]) if data.get("provider") else None
+    return result
 
 
 def _anthropic(system: str, user: str, s: object, key: str, timeout: float,
@@ -787,6 +812,45 @@ def _ollama(system: str, user: str, s: object, timeout: float, max_tokens: int) 
                     tokens_out=tout if isinstance(tout, int) else None)
 
 
+def _openai_compatible(system: str, user: str, s: object, key: str, timeout: float,
+                       max_tokens: int) -> AIResult:
+    name = "OpenAI-compatible API"
+    try:
+        base = _openai_url(_str_setting(s, "openai_base_url"))
+        extra = json.loads(_openai_extra(_str_setting(s, "openai_extra_json")))
+    except ValueError as e:
+        raise AIError(str(e), "config") from None
+    model = _str_setting(s, "openai_model").strip()
+    if not base or not model:
+        raise AIError(tr("ai.openai_not_configured"), "config")
+    body = {"temperature": 0, "max_tokens": max_tokens, **extra,
+            "model": model, "stream": False,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    # Newer OpenAI-compatible models use this name instead of max_tokens.
+    if "max_completion_tokens" in extra:
+        body.pop("max_tokens", None)
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    # Keep the request's tariffs even if settings change while HTTP is pending.
+    pin, pout = _setting(s, "openai_input_price"), _setting(s, "openai_output_price")
+    pcache = _setting(s, "openai_cached_input_price")
+    t0 = time.perf_counter()
+    local = urlsplit(base).hostname in ("localhost", "127.0.0.1", "::1")
+    data = _post_json(name, base + "/chat/completions", headers, body, timeout, local=local, secret=key)
+    result = _chat_result(data, name, "openai_compatible", model, (time.perf_counter() - t0) * 1000, key)
+    usage = data.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    tin, tout = result.tokens_in, result.tokens_out
+    details = usage.get("prompt_tokens_details")
+    cached = _token_count(details.get("cached_tokens")) if isinstance(details, dict) else None
+    if cached is None:
+        cached = _token_count(usage.get("prompt_cache_hit_tokens"))
+    cached = min(cached or 0, tin or 0)
+    if result.cost_usd is None and tin is not None and tout is not None and pin is not None and pout is not None:
+        result.cost_usd = ((tin - cached) * pin + cached * (pin if pcache is None else pcache) + tout * pout) / 1_000_000
+        result.cost_estimated = True
+    return result
+
+
 def _call(provider: str, system: str, user: str, s: object, timeout: float,
           max_tokens: int, api_key: str | None) -> AIResult:
     if provider == "openrouter":
@@ -797,6 +861,10 @@ def _call(provider: str, system: str, user: str, s: object, timeout: float,
         key = _key("anthropic", api_key)
         return _with_deadline(lambda: _anthropic(system, user, s, key, timeout, max_tokens),
                               timeout, "Anthropic")
+    if provider == "openai_compatible":
+        key = _key(provider, api_key)
+        return _with_deadline(lambda: _openai_compatible(system, user, s, key, timeout, max_tokens),
+                              timeout, "OpenAI-compatible API")
     if provider == "ollama":
         return _with_deadline(lambda: _ollama(system, user, s, timeout, max_tokens),
                               timeout, "Ollama")
@@ -811,6 +879,8 @@ def provider_model(s: object, command: bool = False) -> tuple[str, str]:
     provider = _str_setting(s, "command_provider" if command else "ai_provider")
     if provider == "claude_cli":
         return provider, "claude -p"
+    if provider == "openai_compatible":
+        return provider, _str_setting(s, "openai_model")
     if provider == "anthropic":
         return provider, _str_setting(s, "anthropic_model")
     if provider == "ollama":
@@ -912,7 +982,7 @@ def command(instruction: str, selected: str, s: Settings, *,
     """Командный режим: применить голосовую инструкцию к выделенному тексту (таймаут 30 с).
 
     Провайдер — ``s.command_provider``: ``openrouter`` (модель ``ai_model``) или
-    ``claude_cli`` (локальный ``claude -p``); ``anthropic``/``ollama`` тоже поддержаны.
+    ``claude_cli`` (локальный ``claude -p``); ``anthropic``/``ollama``/``openai_compatible`` тоже поддержаны.
     Промпт — на языке интерфейса (``i18n.current()``)."""
     instruction = instruction.strip()
     if not instruction:
