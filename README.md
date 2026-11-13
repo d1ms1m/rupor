@@ -3,7 +3,7 @@
 **English** · [Русский](README.ru.md)
 
 **Fork by d1ms1m.** Based on [listapad2024/rupor](https://github.com/listapad2024/rupor).
-See [the 0.6.1 release notes](docs/releases/v0.6.1-d1ms1m.md) for differences from upstream.
+See [the 0.6.2 release notes](docs/releases/v0.6.2-d1ms1m.md) for differences from upstream.
 
 **Rupor** (Russian *Рупор*, "megaphone") is a free, open-source voice dictation app for Windows.
 Hold **Ctrl+Win**, say a phrase, release — the text appears wherever your cursor is. Rupor works

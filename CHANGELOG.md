@@ -6,6 +6,10 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.2] — d1ms1m, 2026-11-13
+
+See [release notes](docs/releases/v0.6.2-d1ms1m.md) for changes and retained fork features.
+
 ### Fixed
 
 - Suspicious subtitle-style endings trigger at most one recognition pass without the
