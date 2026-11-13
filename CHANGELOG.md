@@ -6,6 +6,28 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] — d1ms1m, 2026-11-12
+
+Based on upstream [PR #13](https://github.com/listapad2024/rupor/pull/13).
+The fork features from 0.6.0 are retained; see [release notes](docs/releases/v0.6.1-d1ms1m.md).
+
+### Fixed
+
+- **Recognition no longer gets stuck repeating a phrase.** Whisper sometimes looped on a short
+  phrase in the middle of a normal dictation ("which interface, which interface, which
+  interface…") and kept repeating it to the end instead of what was actually said; such a loop
+  was too short for the old repetition check. Now a phrase repeated three times in a row (a
+  single word four times) makes Rupor recognise the dictation once more without the hint, and
+  that pass is used when it is clean. If the repeat is still there, it was most likely really
+  said and is kept; only repeats no person makes (a phrase four times or more, a word six
+  times) are collapsed to one.
+
+### Added
+
+- **Transcribe again from the History feed.** Every dictation that still has its voice
+  recording now has a *Transcribe again* button right next to it, not only under History →
+  Recordings. The new text appears at the top of the feed and in *Paste last*.
+
 ## [0.6.0] — d1ms1m, 2026-11-12
 
 ### Fork additions
@@ -275,6 +297,7 @@ First public release.
 - Tray icon, start with Windows, light and dark themes, first-run wizard; a per-user NSIS
   installer without administrator rights.
 
+[0.6.1]: https://github.com/d1ms1m/rupor/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/d1ms1m/rupor/compare/6c25c66a255343bc9e4cf9d9dd034885c609b244...v0.6.0
 [0.4.3]: https://github.com/listapad2024/rupor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/listapad2024/rupor/compare/v0.4.1...v0.4.2

@@ -12,7 +12,7 @@ code.
 
 Full license texts are not reproduced here: they ship inside the packages themselves
 (`*.dist-info/licenses` folders, `LICENSE` files in `node_modules` and in the crate sources) and
-are available at the links below. Versions are given for build **0.6.0 d1ms1m**. How to regenerate this
+are available at the links below. Versions are given for build **0.6.1 d1ms1m**. How to regenerate this
 list after updating dependencies is described [at the end of the file](#how-to-update-this-list).
 
 ## Summary
