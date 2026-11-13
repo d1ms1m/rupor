@@ -420,7 +420,8 @@ OpenRouter. With Ollama everything stays on your computer.
 - **Recognition is local.** Microphone audio is processed on your computer and never leaves it.
   The last 30 recordings (up to 300 MB in total) are kept on disk so that a failed dictation
   isn't lost: you can transcribe it again under History → Recordings. Set the count to 0 in
-  Settings → History to keep none.
+  Settings → History to keep none. Recording metadata also retains the first ASR transcript
+  before automatic rechecking; manually transcribing again does not overwrite it.
 - **No telemetry or analytics.** Rupor goes online only for the model (Hugging Face) and cuBLAS
   (PyPI) on first launch, and to your AI provider if AI is on.
 - **Dictated text isn't written to logs**: only text lengths, timings and program names.

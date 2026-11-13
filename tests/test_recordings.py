@@ -33,6 +33,16 @@ def test_save_roundtrip_and_meta(tmp_path: Path) -> None:
     assert not list((tmp_path / "rec").glob("*.part"))
 
 
+def test_original_transcript_survives_reprocessing(tmp_path: Path) -> None:
+    r = Recordings(tmp_path)
+    rid = r.save(_audio(0.1), BIG)
+    r.update(rid, original_text="Первый текст.", status="ok")
+    r.update(rid, original_text="Повторный текст.", chars=15)
+    [meta] = Recordings(tmp_path).items()
+    assert meta["asr_original_text"] == "Первый текст."
+    assert "original_text" not in meta
+
+
 def test_clipping_and_empty(tmp_path: Path) -> None:
     r = Recordings(tmp_path)
     assert r.save(np.zeros(0, np.float32), BIG) is None
