@@ -6,6 +6,23 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.2] — d1ms1m, 2026-11-13
+
+See [release notes](docs/releases/v0.6.2-d1ms1m.md) for changes and retained fork features.
+
+### Fixed
+
+- Suspicious subtitle-style endings trigger at most one recognition pass without the
+  prompt, shared with existing checks. Inconclusive results keep the original transcript.
+- Record 300 ms after release to avoid cutting the final sound (adapted from upstream
+  PR #6). Capture the destination before waiting and restore ducked audio after recording,
+  including on errors.
+
+### Added
+
+- Preserve the first ASR transcript in saved recording metadata across reprocessing.
+  Existing recording retention settings apply.
+
 ## [0.6.1] — d1ms1m, 2026-11-12
 
 Based on upstream [PR #13](https://github.com/listapad2024/rupor/pull/13).

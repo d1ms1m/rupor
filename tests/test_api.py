@@ -54,7 +54,7 @@ class FakeRecorder:
     def snapshot(self) -> np.ndarray:
         return np.zeros(8000, np.float32)
 
-    def stop(self) -> np.ndarray:
+    def stop(self, tail_s: float = 0.0) -> np.ndarray:
         self.recording = False
         return np.zeros(int(16000 * self.seconds), np.float32)
 
@@ -492,6 +492,7 @@ def test_recordings_saved_rotated_and_retranscribed(env: Env) -> None:
                              "history_id"}
     newest = items[0]
     assert newest["status"] == "ok" and newest["chars"] == len("третья")
+    assert newest["asr_original_text"] == "третья"
     assert newest["history_id"] == h3["id"] and newest["app"] == "notepad.exe"
     assert (env.tmp / "recordings" / f"{newest['id']}.wav").exists()
     # распознать заново: в историю и в «Вставить последнее», но не в окно и не в статистику
@@ -505,6 +506,7 @@ def test_recordings_saved_rotated_and_retranscribed(env: Env) -> None:
     assert env.calls.delivered == []
     assert c.call("stats_get")["words_today"] == words
     assert env.eng.last_text == "третья, но целиком"
+    assert c.call("recordings_list")["items"][0]["asr_original_text"] == "третья"
     # прослушать: WAV целиком, тот же файл
     snd = c.call("recording_audio", {"id": newest["id"]})
     assert snd["mime"] == "audio/wav"

@@ -115,8 +115,9 @@ class Recordings:
         tmp.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self._meta_path(rid))
 
-    def update(self, rid: str | None, **fields: Any) -> None:
-        """Дописать в метаданные (status, chars, history_id). Записи уже нет — ничего."""
+    def update(self, rid: str | None, *, original_text: str | None = None,
+               **fields: Any) -> None:
+        """Обновить метаданные; первый текст ASR сохранить один раз. Нет записи — ничего."""
         if not rid or not valid_id(rid):
             return
         try:
@@ -124,6 +125,8 @@ class Recordings:
                 meta = self._read_meta(rid)
                 if meta is None:
                     return
+                if original_text is not None:
+                    meta.setdefault("asr_original_text", original_text)
                 meta.update(fields)
                 self._write_meta(rid, meta)
         except OSError:

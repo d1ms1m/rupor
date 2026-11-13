@@ -629,8 +629,9 @@ export interface ResultEvent {
   style: string;
 }
 
-/** Сохранённая запись голоса (последние N на диске, см. recordings_keep). Текста в ней нет. */
+/** Сохранённая запись голоса с метаданными первого ASR-текста (см. recordings_keep). */
 export interface RecordingItem {
+  asr_original_text?: string;
   /** Имя файла без расширения: 20261107-183305-581. */
   id: string;
   /** Unix-время начала записи, с. */

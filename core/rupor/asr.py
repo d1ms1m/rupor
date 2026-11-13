@@ -295,12 +295,33 @@ class ModelMissing(RuntimeError):
     """Модели нет в локальном кэше — её нужно скачать (setup_download)."""
 
 
+_TAIL_PHRASES = (
+    "продолжение следует", "спасибо за просмотр", "субтитры сделал dimatorzok",
+    "субтитры создавал dimatorzok", "субтитры делал dimatorzok",
+    "редактор субтитров а синецкая корректор а егорова", "thank you for watching",
+    "thanks for watching", "subtitles by the amara org community",
+)
+_TAIL_RE = re.compile(
+    r"(?:^|(?<=[.!?…,;:]))\s*(?:" + "|".join(
+        r"[\W_]*".join(re.escape(w) for w in phrase.split()) for phrase in _TAIL_PHRASES
+    ) + r")[\W_]*$", re.IGNORECASE)
+
+
+def suspicious_tail_prefix(text: str) -> str | None:
+    """Известное отдельное окончание: только сигнал перепроверки, не фильтр слов."""
+    match = _TAIL_RE.search(text.replace("ё", "е").replace("Ё", "Е"))
+    if match is None or not _norm_phrase(text[:match.start()]):
+        return None
+    return text[:match.start()].rstrip()
+
+
 @dataclass
 class Result:
     text: str
     language: str
     audio_s: float
     elapsed_ms: float
+    original_text: str | None = None
 
 
 def _no_notice(_text: str, _level: str) -> None:
@@ -466,27 +487,51 @@ class Recognizer:
             lang = language or self._pick_language(audio)
             prompt = adapt_prompt(prompt, lang)
             text, stats = self._decode(audio, lang, prompt, guess=True)
-            text = self._second_opinion(audio, lang, text, stats)
+            original_text = text
+            text = self._second_opinion(audio, lang, text, stats, had_prompt=bool(prompt))
         ms = (time.perf_counter() - t0) * 1000
-        r = Result(text, lang, len(audio) / SAMPLE_RATE, ms)
+        r = Result(text, lang, len(audio) / SAMPLE_RATE, ms, original_text)
         log.info("ASR %.1f с аудио → %.0f мс, язык %s, %d симв.", r.audio_s, ms, lang, len(text))
         return r
 
     def _second_opinion(self, audio: np.ndarray, lang: str, text: str,
-                        stats: list[tuple[float | None, float]]) -> str:
+                        stats: list[tuple[float | None, float]], *,
+                        had_prompt: bool = True) -> str:
         """Первый проход — мусор или угадывание: распознать ещё раз без подсказки и без
         угадывания; повтор чистый — он, повтор тоже мусор — пустой текст. Первый проход
-        просто неуверенный — из двух берётся более уверенный, мусорный повтор не берётся."""
+        просто неуверенный — из двух берётся более уверенный, мусорный повтор не берётся.
+        Только служебное окончание — принимать лишь подтверждённое исправление хвоста.
+        Все причины используют один общий дополнительный проход."""
         bad = garbage_reason(text)
         guessed = guessing(stats)
         loop = bad is None and looping(text)
-        if not (bad or guessed or loop or low_confidence(stats)):
+        prefix = suspicious_tail_prefix(text)
+        tail_only = prefix is not None and not (bad or guessed or loop or low_confidence(stats))
+        if not (bad or guessed or loop or low_confidence(stats) or prefix is not None):
             return text
+        if tail_only and not had_prompt and stats and all(t == 0.0 for t, _lp in stats):
+            return text  # уже распознано без подсказки и без температурного fallback
         log.warning("Распознавание сомнительное (%s) — повторяю без подсказки",
                     bad or ("угадывание" if guessed else "зацикливание" if loop
-                            else "низкая уверенность"))
-        text2, stats2 = self._decode(audio, lang, None, guess=False)
+                            else "служебное окончание" if tail_only else "низкая уверенность"))
+        try:
+            text2, stats2 = self._decode(audio, lang, None, guess=False)
+        except Exception:
+            if not tail_only:
+                raise
+            log.warning("Не удалось перепроверить окончание — сохраняю первый результат",
+                        exc_info=True)
+            return text
         again = garbage_reason(text2)
+        if tail_only:
+            # Разрешаем только подтверждённое удаление окончания. Перефразирование,
+            # пустой/неуверенный ответ или ещё одна приписка не подтверждают исправление.
+            if (text2.strip() and not again and not guessing(stats2)
+                    and not low_confidence(stats2) and not looping(text2)
+                    and suspicious_tail_prefix(text2) is None
+                    and _norm_phrase(text2) == _norm_phrase(prefix or "")):
+                return text2
+            return text
         if loop and not again and not guessed:
             # Без подсказки тоже повтор — скорее всего его и правда сказали (или звук такой):
             # берётся проход с меньшим повтором, нечеловеческие повторы сворачиваются

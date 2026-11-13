@@ -135,6 +135,77 @@ def test_ducks_on_confirm_and_restores_on_stop(denv: tuple[Env, FakeDucker]) -> 
     wait_until(lambda: len(env.calls.delivered) == 1)    # диктовка прошла как обычно
 
 
+@pytest.mark.parametrize("fail", [False, True])
+def test_tail_keeps_ducking_and_captures_target_before_wait(
+        denv: tuple[Env, FakeDucker], monkeypatch: pytest.MonkeyPatch, fail: bool) -> None:
+    env, d = denv
+    started(env, d)
+    seen = []
+    stop = env.recorder.stop
+
+    def foreground():
+        seen.append("target")
+        return TARGET
+
+    def finish(tail_s=0.0):
+        assert tail_s == engine.audio.TAIL_S
+        assert seen == ["target"]
+        assert d.ops() == [("duck", "duck", 15)]
+        if fail:
+            raise OSError("microphone disconnected")
+        return stop(tail_s)
+
+    monkeypatch.setattr(engine.winutil, "foreground", foreground)
+    monkeypatch.setattr(env.recorder, "stop", finish)
+    try:
+        if fail:
+            with pytest.raises(OSError):
+                env.eng._handle(Action(Kind.STOP))
+        else:
+            env.eng._handle(Action(Kind.STOP))
+        assert d.ops()[-1] == ("restore",)
+    finally:
+        monkeypatch.setattr(env.recorder, "stop", stop)
+
+
+def test_wizard_cannot_replace_recording_during_tail(
+        denv: tuple[Env, FakeDucker], monkeypatch: pytest.MonkeyPatch) -> None:
+    env, d = denv
+    started(env, d)
+    entered, release, attempted, test_started = (threading.Event() for _ in range(4))
+    stop = env.recorder.stop
+
+    def finish(tail_s=0.0):
+        entered.set()
+        assert release.wait(3)
+        return stop(tail_s)
+
+    def start_test():
+        attempted.set()
+        env.eng.test_record_start()
+        test_started.set()
+
+    monkeypatch.setattr(env.recorder, "stop", finish)
+    stopping = threading.Thread(target=lambda: env.eng._handle(Action(Kind.STOP)))
+    testing = threading.Thread(target=start_test)
+    stopping.start()
+    try:
+        assert entered.wait(3)
+        testing.start()
+        assert attempted.wait(3)
+        assert not test_started.wait(0.05)
+    finally:
+        release.set()
+        stopping.join(3)
+        if testing.ident is not None:
+            testing.join(3)
+        monkeypatch.setattr(env.recorder, "stop", stop)
+    assert not stopping.is_alive() and not testing.is_alive()
+    assert test_started.is_set() and env.recorder.recording
+    assert d.ops() == [("duck", "duck", 15), ("restore",), ("duck", "duck", 15)]
+    env.eng.cancel_test_record()
+
+
 def test_short_tap_is_not_ducked(denv: tuple[Env, FakeDucker],
                                  monkeypatch: pytest.MonkeyPatch) -> None:
     env, d = denv

@@ -25,6 +25,8 @@ SAMPLE_RATE = 16000  # то же, что asr.SAMPLE_RATE (без импорта 
 log = logging.getLogger(__name__)
 
 BLOCK = 512  # 32 мс
+TAIL_S = 0.3  # дописать последний звук после отпускания клавиши (upstream MR #6)
+TAIL_GRACE_S = 0.2  # ограничение ожидания при пропавшем callback
 STALE_S = 1.0  # callback раз в 32 мс; тишина дольше секунды — поток мёртв
 _MME = 0     # индекс host API MME: сам ресемплирует в 16 кГц (WASAPI shared — нет)
 
@@ -72,6 +74,8 @@ class Recorder:
             maxlen=max(1, preroll_ms * SAMPLE_RATE // 1000 // BLOCK))
         self._chunks: list[np.ndarray] = []
         self._recording = False
+        self._tail_left = 0
+        self._tail_done = threading.Event()
         self._lock = threading.Lock()
         self._on_level = on_level
         self._stream: Any = None
@@ -129,7 +133,17 @@ class Recorder:
         block = indata[:, 0].copy()
         with self._lock:
             if self._recording:
-                self._chunks.append(block)
+                if self._tail_left:
+                    take = min(len(block), self._tail_left)
+                    self._chunks.append(block[:take])
+                    self._tail_left -= take
+                    if not self._tail_left:
+                        self._recording = False
+                        self._tail_done.set()
+                        if take < len(block):
+                            self._pre.append(block[take:])
+                else:
+                    self._chunks.append(block)
             else:
                 self._pre.append(block)
         if (self._recording or self.monitor) and self._on_level:
@@ -151,14 +165,25 @@ class Recorder:
             self._chunks = list(self._pre)
             self._pre.clear()
             self._recording = True
+            self._tail_left = 0
 
     def snapshot(self) -> np.ndarray:
         """Записанное на текущий момент (для раннего определения языка)."""
         with self._lock:
             return np.concatenate(self._chunks) if self._chunks else np.zeros(0, np.float32)
 
-    def stop(self) -> np.ndarray:
+    def stop(self, tail_s: float = 0.0) -> np.ndarray:
+        """Завершить запись; при обычном отпускании дописать ограниченный хвост."""
         with self._lock:
+            wait = tail_s > 0 and self._recording and self._stream is not None
+            if wait:
+                self._tail_left = max(1, int(tail_s * SAMPLE_RATE))
+                self._tail_done.clear()
+        if wait:
+            self._tail_done.wait(tail_s + TAIL_GRACE_S)
+        with self._lock:
+            self._tail_left = 0
+            self._tail_done.set()
             self._recording = False
             audio = np.concatenate(self._chunks) if self._chunks else np.zeros(0, np.float32)
             self._chunks = []

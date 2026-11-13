@@ -65,6 +65,32 @@ def test_silent_stream_is_reopened_on_start(fake_sd: None,
     assert audio.SAMPLE_RATE * 0.9 <= len(got) <= audio.SAMPLE_RATE * 1.1  # без старого пре-буфера
 
 
+def test_stop_tail_is_exact_and_bounded(fake_sd: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = audio.Recorder()
+    rec.start()
+    stream = FakeStream.created[0]
+    stream.feed(0.1)
+    before = len(rec.snapshot())
+
+    def wait(timeout):
+        assert timeout <= 0.6
+        stream.feed(0.6)
+        return True
+
+    monkeypatch.setattr(rec._tail_done, "wait", wait)
+    got = rec.stop(0.3)
+    assert len(got) == before + 4800
+    assert not rec.recording
+
+
+def test_tail_timeout_stops_recording(fake_sd: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = audio.Recorder()
+    rec.start()
+    monkeypatch.setattr(rec._tail_done, "wait", lambda timeout: False)
+    assert len(rec.stop(0.3)) == 0
+    assert not rec.recording
+
+
 def test_inactive_stream_is_stale(fake_sd: None) -> None:
     rec = audio.Recorder()
     rec.open()
