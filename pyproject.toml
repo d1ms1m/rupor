@@ -50,6 +50,14 @@ python_version = "3.13"
 mypy_path = "core"
 
 [[tool.mypy.overrides]]
-module = ["faster_whisper.*", "sounddevice.*", "pystray.*", "ctranslate2.*", "comtypes.*",
+module = ["faster_whisper.*", "sounddevice.*", "pystray.*", "ctranslate2.*",
           "huggingface_hub.*", "PyInstaller.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# COM methods are generated at runtime from _methods_. comtypes 1.5's partial
+# annotations cannot describe these interfaces; keep this boundary dynamic on
+# both typed and untyped releases while checking our own modules in strict mode.
+module = ["comtypes", "comtypes.*"]
+follow_imports = "skip"
 ignore_missing_imports = true
