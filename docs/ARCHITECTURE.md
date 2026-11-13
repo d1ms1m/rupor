@@ -92,6 +92,11 @@ URL: `ws://127.0.0.1:<port>/?token=<token>`. Без верного токена 
 | `history_clear` | `{period: "day"\|"week"\|"month"\|"all"}` | `{deleted: int}` — удалить записи **за** последний период («за день» = последние 24 ч) |
 | `history_reinsert` | `{id}` | `null` — активировать последнее «чужое» окно (не Рупора) и вставить `text` |
 | `last_insert` | — | `null` — вставить последний результат в последнее чужое окно |
+| `recordings_list` | — | `{items: [RecordingItem], total_bytes, keep, max_bytes}` — сохранённые записи голоса, новые сверху. `RecordingItem`: `{id, ts, duration_s, bytes, app, status: "pending"\|"ok"\|"empty"\|"error", chars, history_id}` (текста в нём нет — он в истории) |
+| `recording_transcribe` | `{id}` | `{id, text, raw, language, duration_s, ai}` — распознать запись заново (словарь, сниппеты, ИИ со стилем по умолчанию); результат — в историю и в «Вставить последнее», в окно не вставляется, статистика не пополняется. `text` пустой — речи нет. Нет записи — ошибка «Запись голоса не найдена…» |
+| `recording_delete` | `{id}` | `null` |
+| `recordings_clear` | — | `{deleted: int}` |
+| `recording_reveal` | `{id?}` | `null` — проводник: с `id` — файл записи выделен, без — папка записей |
 | `dict_list` | — | `[DictItem]` |
 | `dict_upsert` | `{id?, term, variants: [str]}` | `DictItem` |
 | `dict_delete` | `{id}` | `null` |
@@ -116,14 +121,21 @@ URL: `ws://127.0.0.1:<port>/?token=<token>`. Без верного токена 
 | `recent_apps` | — | `[{process, title, titles: string[]}]` — до 20 последних различных процессов, куда был фокус (новые первыми); `titles` — до 10 последних различных заголовков окон процесса, свежие первыми (только в памяти, на диск не пишутся) |
 | `rdp_windows` | — | `[{key, title, process, included: bool}]` — открытые окна RDP-клиентов; `key` — ключ сессии (см. «Рассылка в RDP»), `included` — ключ есть в `broadcast_targets` |
 | `rdp_toggle` | `{key, included: bool}` (совместимость: `{title, included}`) | `null` — отметить/снять сессию для рассылки (`broadcast_targets`, без учёта регистра). По `title` ключ берётся у открытого окна с таким заголовком, иначе по правилу mstsc |
-| `ai_key_status` | `{provider: "openrouter"\|"anthropic"}` | `{has_key, masked}` — `masked` вида `sk-or-v1-…XYZ` |
+| `ai_keys_list` | — | `[AiKeyItem]` — список ключей ИИ по приоритету (см. «Список ключей ИИ»): запись `settings.ai_keys` + `title`, `has_key`, `masked`, расход Рупора через ключ (`spent_usd`, `calls`, `spent_since_usd`), пауза после ошибки (`paused_until`, `paused_reason`). Без сети |
+| `ai_key_add` | `{provider, key, label?, balance_usd?}` | `AiKeyItem` — новый ключ в конец списка; секрет — в Credential Manager. Первый ключ провайдера получает цель `Rupor/<провайдер>`, следующие — `Rupor/<провайдер>/<id>` |
+| `ai_key_update` | `{id, label?, enabled?, balance_usd?: number\|null}` | `AiKeyItem` — подпись, вкл/выкл, остаток, введённый вручную (`null` — убрать; время ввода — `balance_at`) |
+| `ai_key_replace` | `{id, key}` | `AiKeyItem` — заменить секрет ключа |
+| `ai_key_remove` | `{id}` | `null` — убрать ключ из списка и его секрет из Credential Manager |
+| `ai_keys_reorder` | `{ids: [str]}` | `[AiKeyItem]` — новый порядок (= приоритет); `ids` — все id списка ровно по разу, иначе ошибка |
+| `ai_key_info` | `{id, force?: bool}` | `AiKeyInfo` — проверка и баланс ключа: OpenRouter — баланс по API (`balance_source: "api"`), Anthropic — проверка `GET /v1/models`, баланса по API нет: введён остаток — оценка «остаток − расход с момента ввода» (`"estimate"`), иначе `error` «не отдаёт баланс по API». Кэш проверки 5 мин (неудачной — минута) |
+| `ai_key_status` | `{provider: "openrouter"\|"anthropic"}` | `{has_key, masked}` — `masked` вида `sk-or-v1-…XYZ` (ключ по прежней цели `Rupor/<провайдер>`) |
 | `ai_key_import_env` | `{path?}` | `{imported: bool, masked}` — читает `openrouter_api_key` из `.env` (по умолчанию `settings.env_path`) и кладёт в Credential Manager |
-| `ai_key_set` | `{provider, key}` | `{masked}` |
-| `ai_key_delete` | `{provider}` | `null` |
+| `ai_key_set` | `{provider, key}` | `{masked}` — ключ по прежней цели `Rupor/<провайдер>`; записи нет в списке ключей — она добавляется в конец (мастер первого запуска, импорт из `.env`) |
+| `ai_key_delete` | `{provider}` | `null` — и запись `<провайдер>` из списка ключей |
 | `ai_key_check` | — | `{valid, label, balance_usd, usage_usd, limit_usd, error}` — OpenRouter `GET /api/v1/key` + `GET /api/v1/credits` |
 | `ai_test` | `{text, style}` | `{text, ms, cost_usd, provider, model}` — прогнать текст через очистку, как в диктовке: словарь → ИИ → снова словарь (вызов пишется в расход ИИ как `test`) |
 | `ai_usage_stats` | — | `AiUsageStats` — расход ИИ (см. «Расход ИИ и баланс») |
-| `ai_balance` | `{force?: bool}` | `AiBalance` — баланс ключа OpenRouter, кэш 5 мин (`force` — мимо кэша). Ни `ai_provider`, ни `command_provider` не `openrouter` — без `force` в сеть не ходит (`error` «OpenRouter не используется…») |
+| `ai_balance` | `{force?: bool}` | `AiBalance` — баланс ключа, который сейчас первым в очереди (очистки, если ИИ включён, иначе командного режима): то же, что `ai_key_info` этого ключа, + `key_id`, `provider`, `label`, `estimate`. Облачные ключи не используются (Ollama, Claude Code) — в сеть не ходит (`error` «Облачные ключи не используются…»); ключей нет — `error` «Ключей ИИ нет…» |
 | `vocab_list` | `{process?: str, limit?: int=50}` | `[{word, count, excluded}]` — личный словарь частот: до `limit` слов, которые идут в подсказку (достаточно частые), частые первыми; после них — все исключённые пользователем слова (и за пределом `limit`, и без частот — `count: 0`; для `process` — только встречавшиеся в нём). Падежные формы слиты («Тимуру», «Тимура» → «Тимур»). `process` — только этот процесс (без учёта регистра), `limit` ≤ 500 |
 | `vocab_exclude` | `{word, excluded: bool}` | `null` — исключить слово из подсказок или вернуть (без учёта регистра, «ё» и формы слова: «Тимуру» исключает и «Тимура», вернуть можно любой формой) |
 | `open_logs` | — | `null` (открыть папку логов в проводнике) |
@@ -251,13 +263,19 @@ type Stats = {
   "default_style": "normal",
   "history_enabled": true,
   "history_retention_days": 0,      // 0 — хранить всегда
+  "recordings_keep": 30,             // последние записи голоса на диске (0 — не сохранять)
+  "recordings_max_mb": 300,         // …и не больше стольких МБ на все
   "pill_enabled": true,
   "pill_position": null,            // [x, y] физические пиксели или null — снизу по центру
   "theme": "system",                // system | dark | light
   "accent": "#7c5cff",
   "first_run_done": false,
   "ai_enabled": false,
-  "ai_provider": "openrouter",      // openrouter | anthropic | ollama | openai_compatible
+  "ai_provider": "keys",            // keys (список ключей по приоритету) | openrouter | anthropic (только ключи этого провайдера) | ollama | openai_compatible
+  "ai_keys": [                      // ключи ИИ по приоритету; секреты — в Credential Manager
+    {"id": "anthropic", "provider": "anthropic", "label": "", "enabled": true,
+     "balance_usd": 80.0, "balance_at": 1762500000.0}   // остаток, введённый вручную, и когда
+  ],
   "ai_model": "anthropic/claude-haiku-4.5",
   "anthropic_model": "claude-haiku-4-5",
   "ollama_model": "qwen2.5:7b",
@@ -272,7 +290,7 @@ type Stats = {
   "ai_mode": "wait",                // wait | raw_first
   "ai_min_words": 6,
   "ai_timeout_s": 5,
-  "command_provider": "openrouter", // любой ai_provider или claude_cli
+  "command_provider": "keys",       // любой ai_provider или claude_cli
   "env_path": "",                   // путь к .env с openrouter_api_key (необязательно)
   "learn_mode": "auto",             // обучение словаря на правках: auto | suggest | off
   "dict_fuzzy": true,               // словарь: узнавать похожие написания терминов по звучанию
@@ -336,8 +354,15 @@ CREATE TABLE vocab_excluded(word TEXT PRIMARY KEY);            -- casefold + «�
                                                                -- действует на все его формы
 -- версия 4: расчёт по ручным тарифам, фиксируется на момент вызова
 ALTER TABLE ai_usage ADD COLUMN cost_estimated INTEGER NOT NULL DEFAULT 0;
-PRAGMA user_version = 4;
+-- версия 5: объединение схемы форка и upstream 0.6.0
+ALTER TABLE ai_usage ADD COLUMN key_id TEXT;
+CREATE INDEX IF NOT EXISTS ai_usage_key ON ai_usage(key_id, ts);
+PRAGMA user_version = 5;
 ```
+
+Историческая схема 4 различается: форк содержит `cost_estimated`, upstream — `key_id`
+и индекс `ai_usage_key`. Миграция 4 → 5 проверяет существующие столбцы и добавляет только
+недостающие; существующие суммы, признаки расчёта и идентификаторы ключей сохраняются.
 
 Миграции — `storage._MIGRATIONS` (SQL или функция Python на шаг); миграция 2 → 3 только
 создаёт таблицы. Если `kv.vocab_version` не совпадает с `vocab.version()` (миграция, правила
@@ -957,15 +982,13 @@ volume(), muted(), set_volume(v), set_muted(m)`) — `CoreAudioBackend` или �
   `estimated_cost_calls` в today/week/month/total появляется при наличии расчётных вызовов.
   Результат `ai_test` дополнительно содержит `cost_estimated: true` для расчётной суммы.
   Исторические записи не пересчитываются при смене тарифов.
-- `ai_balance`: `ai.check_openrouter_key` (OpenRouter `/key` + `/credits`), кэш 5 минут
-  (неудачная проверка — 1 минута), `force` — мимо кэша, смена ключа сбрасывает кэш. Нет
-  ключа — `error` «Ключ OpenRouter не задан — добавьте его в Настройках → ИИ», сеть не
-  трогается. Ни очистка (`ai_provider`), ни команды (`command_provider`) не идут через
-  OpenRouter — без `force` сеть тоже не трогается (`error` «OpenRouter не используется (очистка
-  и команды идут через другого провайдера) — баланс не проверяется»); `force` (кнопка
-  «Обновить») ключ проверяет. После удачного вызова OpenRouter баланс обновляется в фоне,
-  если кэш устарел.
-- Баланс < $1 и OpenRouter используется — `notice` warn «На балансе OpenRouter меньше $1 —
+- `ai_balance`: баланс ключа, который первым в очереди (см. «Список ключей ИИ»):
+  OpenRouter — `ai.check_openrouter_key` (`/key` + `/credits`), Anthropic — оценка по введённому
+  остатку. Кэш проверки 5 минут (неудачной — 1 минута), `force` — мимо кэша, смена ключа
+  сбрасывает кэш. Ключей нет — `error` «Ключей ИИ нет…»; облачные ключи не используются
+  (Ollama, Claude Code) — `error` «Облачные ключи не используются…», сеть не трогается. После
+  удачного вызова OpenRouter баланс этого ключа обновляется в фоне, если кэш устарел.
+- Баланс первого ключа в очереди < $1 — `notice` warn «На балансе <ключ> меньше $1 —
   пополните его, иначе ИИ-очистка перестанет работать (осталось $0.42)» с
   `action: "open_settings_ai"`, не чаще раза в сутки (`kv.ai_low_balance_notice`).
 - Трей: UI формирует строку `ai_line` для `update_tray` из `ai_usage_stats` и `ai_balance`.
@@ -1371,3 +1394,34 @@ def selftest() -> tuple[bool, str]             # «локализация: ok (r
 
 Зависимости ядра (в т. ч. `websockets`, `comtypes`, а в dev — `pytest`, `mypy`, `pyinstaller`) —
 в `pyproject.toml`.
+
+
+## Список ключей ИИ
+
+Ключей ИИ может быть сколько угодно (до 20), в том числе несколько у одного провайдера
+(`rupor.keys`). Описание — в `settings.ai_keys` (id, провайдер, подпись, вкл/выкл, остаток,
+введённый вручную), порядок списка — приоритет. Секрет — в Credential Manager:
+`Rupor/openrouter` и `Rupor/anthropic` для первых ключей провайдера (id = имя провайдера,
+так было до списка), `Rupor/<провайдер>/<id>` для остальных.
+
+- **Очередь.** `ai_provider` / `command_provider` = `keys` — все включённые ключи по порядку;
+  `openrouter` / `anthropic` — только ключи этого провайдера. Модель — по провайдеру ключа
+  (`ai_model` для OpenRouter, `anthropic_model` для Anthropic).
+- **Переход на следующий ключ.** Ошибка ключа или счёта (`auth`, `payment`, `forbidden`),
+  лимит (`rate_limit`), сбой провайдера (`server`), сеть (`network`), неверный запрос
+  (`bad_request`, например модели нет у этого провайдера) — сразу следующий ключ. Таймаут —
+  нет: диктовка уже прождала `ai_timeout_s`. Плохой ответ модели (обрезан, отказ) — тоже нет.
+  Ключ без секрета пропускается. Все ключи упали — наружу ошибка первого.
+- **Пауза.** Упавший ключ уходит в конец очереди: `auth`/`payment`/`forbidden` — на 30 минут,
+  `no_key`/`bad_request` — на 10, лимит, сбой, сеть и таймаут — на минуту. Так следующая
+  диктовка не ждёт заведомо нерабочий ключ. Замена секрета или вкл/выкл ключа снимают паузу.
+- **Расход по ключу.** `ai_usage.key_id` (общая схема базы 5) — какой ключ ответил;
+  `Storage.ai_key_spend(id, since)`.
+- **Баланс.** OpenRouter — по API (`/key` + `/credits`). У Anthropic API баланса нет: если
+  пользователь ввёл остаток из Console, показывается оценка «остаток − расход Рупора через
+  этот ключ с момента ввода» (расход считается по таблице цен `ANTHROPIC_PRICES`, модель не из
+  таблицы оценку не уменьшает). Иначе — честное «баланс по API недоступен» и расход Рупора.
+- **Переход со старых настроек.** Файл без `ai_keys`: ключи `Rupor/openrouter` и
+  `Rupor/anthropic` становятся записями списка (выбранный провайдер первым), `ai_provider` и
+  `command_provider` `openrouter`/`anthropic` → `keys`. Записи без секрета движок убирает при
+  запуске.

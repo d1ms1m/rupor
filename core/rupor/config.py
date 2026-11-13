@@ -20,6 +20,7 @@ import ntpath
 import os
 import re
 import threading
+import time
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Callable
@@ -36,9 +37,19 @@ MODE_CLIPBOARD = "clipboard"  # всегда через буфер
 INSERT_MODES = (MODE_AUTO, MODE_TYPE, MODE_CLIPBOARD)
 
 THEMES = ("system", "dark", "light")
-AI_PROVIDERS = ("openrouter", "anthropic", "ollama", "openai_compatible")
+# keys — облачные ключи из списка ai_keys по приоритету (OpenRouter и Anthropic вперемешку,
+# с переходом на следующий ключ при ошибке); openrouter / anthropic — только ключи этого
+# провайдера из того же списка (так было до списка ключей); ollama — офлайн, без ключа
+AI_PROVIDERS = ("keys", "openrouter", "anthropic", "ollama", "openai_compatible")
 AI_MODES = ("wait", "raw_first")
-COMMAND_PROVIDERS = ("openrouter", "claude_cli", "anthropic", "ollama", "openai_compatible")
+COMMAND_PROVIDERS = ("keys", "openrouter", "claude_cli", "anthropic", "ollama", "openai_compatible")
+# Провайдеры, у которых есть ключи API (Credential Manager), и значения ai_provider /
+# command_provider, которые ходят по списку ключей
+KEY_PROVIDERS = ("openrouter", "anthropic")
+CHAIN_PROVIDERS = ("keys", "openrouter", "anthropic")
+AI_KEYS_MAX = 20
+AI_KEY_LABEL_MAX = 60
+_KEY_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 DEVICES = ("cuda", "cpu")
 # Обучение словаря на правках: auto — добавлять сразу (с «Отменить»), suggest — предлагать
 # (повторная такая же правка добавляется сама), off — не следить за полем
@@ -67,7 +78,7 @@ DEFAULT_APP_RULES: dict[str, dict[str, str | None]] = {
 
 HOTKEY_FIELDS = ("ptt_key", "broadcast_modifier", "command_modifier", "cancel_key",
                  "tap_max_ms", "double_tap_ms", "insert_last_hotkey", "copy_last_hotkey",
-                 "mouse_button")
+                 "convert_layout_hotkey", "mouse_button")
 KEY_FIELDS = ("ptt_key", "broadcast_modifier", "command_modifier", "cancel_key")
 # Смена любого из них — перезагрузка модели в фоне (model_dir: модель ищется в новой папке,
 # нет там — качается туда, прежняя распознаёт, пока новая не готова)
@@ -100,6 +111,9 @@ class Settings:
     # Сочетания «Вставить последнее» / «Скопировать последнее» (пустая строка — выключено)
     insert_last_hotkey: str = "ctrl+alt+shift+v"
     copy_last_hotkey: str = "ctrl+alt+shift+c"
+    # «Сменить раскладку выделенного»: ghbdtn ↔ привет (механически, без ИИ);
+    # Shift+Pause — как в Punto Switcher, ни с чем в Windows и программах не конфликтует
+    convert_layout_hotkey: str = "shift+pause"
 
     # Аудио
     input_device: str | None = None  # имя или индекс устройства; None — по умолчанию
@@ -167,6 +181,10 @@ class Settings:
     default_style: str = "normal"
     history_enabled: bool = True
     history_retention_days: int = 0     # 0 — хранить всегда
+    # Последние записи голоса на диске (recordings.py): сколько хранить (0 — не сохранять,
+    # сохранённые удаляются) и сколько места они могут занять всего, МБ (минута ≈ 1,9 МБ)
+    recordings_keep: int = 30
+    recordings_max_mb: int = 300
     pill_enabled: bool = True
     pill_position: list[int] | None = None  # [x, y] в физических пикселях; None — снизу по центру
     theme: str = "system"
@@ -177,7 +195,12 @@ class Settings:
 
     # ИИ
     ai_enabled: bool = False
-    ai_provider: str = "openrouter"
+    ai_provider: str = "keys"
+    # Ключи ИИ по приоритету: [{id, provider, label, enabled, balance_usd, balance_at}].
+    # Секреты — в Credential Manager (rupor.keys.target), здесь только описание и порядок.
+    # balance_usd — баланс, который пользователь ввёл сам (для провайдеров без API баланса),
+    # balance_at — когда (unix сек): оценка остатка = balance_usd − расход ключа с того момента
+    ai_keys: list[dict[str, Any]] = field(default_factory=list)
     ai_model: str = "anthropic/claude-haiku-4.5"
     anthropic_model: str = "claude-haiku-4-5"
     ollama_model: str = "qwen2.5:7b"
@@ -192,7 +215,7 @@ class Settings:
     ai_mode: str = "wait"               # wait | raw_first
     ai_min_words: int = 6
     ai_timeout_s: float = 5
-    command_provider: str = "openrouter"
+    command_provider: str = "keys"
     env_path: str = ""                  # путь к .env с openrouter_api_key (необязательно)
 
     def validate(self) -> None:
@@ -205,6 +228,9 @@ class Settings:
                 continue
             if f.name == "title_rules":
                 self.title_rules = _title_rules(v, strict=False)
+                continue
+            if f.name == "ai_keys":
+                self.ai_keys = _ai_keys(v, strict=False)   # битые записи — поштучно
                 continue
             try:
                 setattr(self, f.name, _VALIDATORS[f.name](v))
@@ -585,6 +611,66 @@ def _title_rules(v: Any, strict: bool = True) -> list[dict[str, str | None]]:
     return out
 
 
+def ai_key_entry(v: Any) -> dict[str, Any]:
+    """Проверенная запись списка ключей ИИ (без секрета)."""
+    if not isinstance(v, dict):
+        raise ValueError(tr("cfg.ai_key_expect"))
+    kid = v.get("id")
+    if not isinstance(kid, str) or not _KEY_ID_RE.match(kid):
+        raise ValueError(tr("cfg.ai_key_bad_id"))
+    provider = v.get("provider")
+    if provider not in KEY_PROVIDERS:
+        raise ValueError(tr("cfg.ai_key_bad_provider", options=", ".join(KEY_PROVIDERS)))
+    label = v.get("label", "")
+    if label is None:
+        label = ""
+    if not isinstance(label, str):
+        raise ValueError(tr("cfg.expect_str"))
+    label = " ".join(label.split())
+    if len(label) > AI_KEY_LABEL_MAX:
+        raise ValueError(tr("cfg.too_long", max=AI_KEY_LABEL_MAX))
+    enabled = v.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ValueError(tr("cfg.expect_bool"))
+    bal = v.get("balance_usd")
+    at = v.get("balance_at")
+    if bal is not None:
+        bal = _float(0, 1_000_000)(bal)
+        at = _float(0, 1e11)(at) if at is not None else 0.0
+    else:
+        at = None
+    return {"id": kid, "provider": provider, "label": label, "enabled": enabled,
+            "balance_usd": bal, "balance_at": at}
+
+
+def _ai_keys(v: Any, strict: bool = True) -> list[dict[str, Any]]:
+    """Список ключей ИИ по приоритету; id не повторяются."""
+    if not isinstance(v, list):
+        if strict:
+            raise ValueError(tr("cfg.ai_keys_expect"))
+        log.warning("ai_keys: не список — список ключей сброшен")
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in v:
+        try:
+            e = ai_key_entry(item)
+            if e["id"] in seen:
+                raise ValueError(tr("cfg.ai_key_dup", id=e["id"]))
+        except ValueError as err:
+            if strict:
+                raise
+            log.warning("Ключ ИИ в списке пропущен: %s", err)
+            continue
+        seen.add(e["id"])
+        out.append(e)
+    if len(out) > AI_KEYS_MAX:
+        if strict:
+            raise ValueError(tr("cfg.too_many", max=AI_KEYS_MAX))
+        out = out[:AI_KEYS_MAX]
+    return out
+
+
 _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "ptt_key": _keyset,
     "broadcast_modifier": _key,
@@ -596,6 +682,7 @@ _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "insert_last_hotkey": _chord,
     "mouse_button": _choice(("", "middle", "x1", "x2")),
     "copy_last_hotkey": _chord,
+    "convert_layout_hotkey": _chord,
     "input_device": _input_device,
     "min_record_ms": _int(0, 5000),
     "model": _text(max_len=300),
@@ -630,6 +717,8 @@ _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "default_style": _style,
     "history_enabled": _bool,
     "history_retention_days": _int(0, 36500),
+    "recordings_keep": _int(0, 500),
+    "recordings_max_mb": _int(20, 20000),
     "pill_enabled": _bool,
     "pill_position": _pill_position,
     "theme": _choice(THEMES),
@@ -638,6 +727,7 @@ _VALIDATORS: dict[str, Callable[[Any], Any]] = {
     "first_run_done": _bool,
     "ai_enabled": _bool,
     "ai_provider": _choice(AI_PROVIDERS),
+    "ai_keys": _ai_keys,
     "ai_model": _text(max_len=200),
     "anthropic_model": _text(max_len=200),
     "ollama_model": _text(max_len=200),
@@ -664,7 +754,7 @@ def label(name: str) -> str:
 def _check_hotkeys(s: Settings) -> None:
     """Клавиши жестов не должны пересекаться: «правый Alt» конфликтует и с «alt»,
     и с сочетанием «ctrl+alt»."""
-    from .hotkeys import key_group, key_label, parse_keyset
+    from .hotkeys import key_group, key_label, parse_chord, parse_keyset
     names = {"ptt_key": s.ptt_key, "broadcast_modifier": s.broadcast_modifier,
              "command_modifier": s.command_modifier, "cancel_key": s.cancel_key}
     seen: dict[int, str] = {}
@@ -675,8 +765,16 @@ def _check_hotkeys(s: Settings) -> None:
                 raise ValueError(tr("cfg.hotkey_conflict", label=label(k),
                                     other=label(seen[vk]), key=key_label(v)))
             seen[vk] = k
-    if s.insert_last_hotkey and s.insert_last_hotkey == s.copy_last_hotkey:
-        raise ValueError(tr("cfg.chords_same"))
+    chords = {"insert_last_hotkey": s.insert_last_hotkey, "copy_last_hotkey": s.copy_last_hotkey,
+              "convert_layout_hotkey": s.convert_layout_hotkey}
+    used: dict[Any, str] = {}
+    for k, v in chords.items():
+        if not v:
+            continue
+        ch = parse_chord(v)
+        if ch in used:
+            raise ValueError(tr("cfg.chords_same", a=label(used[ch]), b=label(k)))
+        used[ch] = k
 
 
 def apply_patch(s: Settings, patch: Any) -> list[str]:
@@ -736,7 +834,8 @@ def _migrate_hotkeys(s: Settings, raw: dict[str, Any]) -> None:
         d.ptt_key, d.broadcast_modifier, d.command_modifier)
     try:
         _check_hotkeys(cand)
-    except ValueError as e:
+    except (ValueError, TypeError, AttributeError) as e:
+        # значения из файла ещё не проверены (validate — позже): cancel_key: null и т. п.
         log.warning("Хоткеи не переведены на новые умолчания: %s", e)
         return
     s.ptt_key, s.broadcast_modifier, s.command_modifier = (
@@ -768,13 +867,51 @@ def _migrate_broadcast(s: Settings) -> None:
              len(targets), len(wins))
 
 
+def _keep_broken(p: Path) -> None:
+    """Нечитаемый settings.json не затираем умолчаниями молча: откладываем рядом копию
+    (settings.broken-<время>.json) — правила, хоткеи и цели рассылки можно вернуть руками."""
+    dst = p.with_name(f"{p.stem}.broken-{time.strftime('%Y%m%d-%H%M%S')}{p.suffix}")
+    try:
+        p.replace(dst)
+        log.error("Испорченный файл настроек сохранён как %s", dst)
+    except OSError as e:
+        log.error("Испорченный файл настроек не отложен (%s)", e)
+
+
+def _migrate_ai_keys(s: Settings) -> None:
+    """Файл до списка ключей (нет ai_keys): прежние ключи OpenRouter и Anthropic
+    (``Rupor/openrouter``, ``Rupor/anthropic``) становятся записями списка — выбранный
+    провайдер первым, — а очистка и командный режим идут «по списку ключей». Записи без
+    секрета в Credential Manager движок уберёт при запуске (keys.drop_missing_legacy)."""
+    first = (s.ai_provider if s.ai_provider in KEY_PROVIDERS else
+             s.command_provider if s.command_provider in KEY_PROVIDERS else "openrouter")
+    order = [first, *(p for p in KEY_PROVIDERS if p != first)]
+    s.ai_keys = [{"id": p, "provider": p, "label": "", "enabled": True,
+                  "balance_usd": None, "balance_at": None} for p in order]
+    if s.ai_provider in KEY_PROVIDERS:
+        s.ai_provider = "keys"
+    if s.command_provider in KEY_PROVIDERS:
+        s.command_provider = "keys"
+    log.info("ИИ: переход на список ключей (%s первым)", first)
+
+
 def load() -> Settings:
     p = settings_path()
     s = Settings()
     migrate_rdp = False
+    write = True
+    text: str | None = None
     if p.exists():
         try:
-            raw: Any = json.loads(p.read_text(encoding="utf-8"))
+            text = p.read_text(encoding="utf-8")
+        except OSError as e:
+            # файл занят (антивирус, OneDrive) — работаем на умолчаниях, но файл не трогаем:
+            # иначе временная блокировка стёрла бы все настройки пользователя
+            log.error("Не удалось прочитать %s: %s — беру настройки по умолчанию", p, e)
+            write = False
+    if text is not None:
+        try:
+            raw: Any = json.loads(text)
             if not isinstance(raw, dict):
                 raise ValueError(tr("cfg.expect_json_object"))
             known = {f.name for f in fields(Settings)}
@@ -783,22 +920,34 @@ def load() -> Settings:
                     setattr(s, k, v)
             _migrate_hotkeys(s, raw)
             migrate_rdp = "broadcast_targets" not in raw
+            if "ai_keys" not in raw:
+                _migrate_ai_keys(s)
             if "default_style" not in raw and isinstance(s.app_rules, dict):
                 # Файл этапов 1–2: дописываем стили по приложениям, не трогая правила пользователя
                 for proc, rule in DEFAULT_APP_RULES.items():
                     s.app_rules.setdefault(proc, dict(rule))
-        except (OSError, ValueError) as e:
+        except ValueError as e:
             log.error("Не удалось прочитать %s: %s — беру настройки по умолчанию", p, e)
             s = Settings()
             migrate_rdp = False
+            _keep_broken(p)
+            # ключи ИИ лежат в Credential Manager и пережили порчу файла: прежние цели — в
+            # список (записи без секрета движок уберёт при запуске)
+            _migrate_ai_keys(s)
     s.validate()
     if migrate_rdp:
         _migrate_broadcast(s)
-    save(s)  # дописать новые ключи со значениями по умолчанию
+    if write:
+        try:
+            save(s)  # дописать новые ключи со значениями по умолчанию
+        except OSError as e:
+            # файл держит антивирус или OneDrive — ядро всё равно стартует, настройки в памяти
+            log.error("Не удалось записать %s: %s — сохраню при следующем изменении", p, e)
     return s
 
 
 _SAVE_LOCK = threading.Lock()
+_REPLACE_PAUSES_S = (0.1, 0.25, 0.5, 1.0)  # антивирус держит свежий файл доли секунды
 
 
 def save(s: Settings) -> None:
@@ -807,4 +956,11 @@ def save(s: Settings) -> None:
     with _SAVE_LOCK:
         tmp = p.with_suffix(".tmp")
         tmp.write_text(data, encoding="utf-8")
+        for pause in _REPLACE_PAUSES_S:
+            try:
+                tmp.replace(p)
+                return
+            except PermissionError as e:
+                log.debug("%s занят (%s), жду %.2f с", p.name, e, pause)
+                time.sleep(pause)
         tmp.replace(p)

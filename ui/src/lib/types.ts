@@ -14,10 +14,59 @@ export type CoreStateName =
 
 export type InsertMode = "auto" | "type" | "clipboard";
 export type ThemeMode = "system" | "dark" | "light";
-export type AiProvider = "openrouter" | "anthropic" | "ollama" | "openai_compatible";
-export type KeyProvider = "openrouter" | "anthropic" | "openai_compatible";
+/**
+ * keys — облачные ключи из Settings.ai_keys по приоритету (переход на следующий при ошибке);
+ * openrouter / anthropic — только ключи этого провайдера из того же списка; ollama — офлайн.
+ */
+export type AiProvider = "keys" | "openrouter" | "anthropic" | "ollama" | "openai_compatible";
+export type CloudKeyProvider = "openrouter" | "anthropic";
+export type KeyProvider = CloudKeyProvider | "openai_compatible";
 export type AiMode = "wait" | "raw_first";
-export type CommandProvider = AiProvider | "claude_cli";
+export type CommandProvider = "keys" | "openrouter" | "claude_cli" | "anthropic" | "ollama" | "openai_compatible";
+
+/** Запись списка ключей ИИ (Settings.ai_keys); порядок списка — приоритет. Секрета тут нет. */
+export interface AiKeyEntry {
+  id: string;
+  provider: CloudKeyProvider;
+  label: string;
+  enabled: boolean;
+  /** Остаток, введённый вручную (для провайдеров без API баланса), $; null — не введён. */
+  balance_usd: number | null;
+  /** Когда введён остаток, unix сек. */
+  balance_at: number | null;
+}
+
+/** Строка списка ключей в настройках (ai_keys_list): запись + маска и расход, без сети. */
+export interface AiKeyItem extends AiKeyEntry {
+  /** Подпись для людей: своя или «Anthropic #2». */
+  title: string;
+  has_key: boolean;
+  masked: string | null;
+  /** Расход Рупора через ключ: всего и с момента ввода остатка. */
+  spent_usd: number;
+  calls: number;
+  spent_since_usd: number | null;
+  /** Ключ после ошибки стоит в конце очереди — до (unix сек) и почему (AIError.kind). */
+  paused_until: number | null;
+  paused_reason: string | null;
+}
+
+/** Проверка и баланс одного ключа (ai_key_info; кэш ядра 5 мин, force — сейчас). */
+export interface AiKeyInfo {
+  id: string;
+  provider: CloudKeyProvider;
+  valid: boolean;
+  balance_usd: number | null;
+  /** api — баланс от провайдера; estimate — введённый остаток минус расход Рупора. */
+  balance_source: "api" | "estimate" | null;
+  usage_usd: number | null;
+  limit_usd: number | null;
+  spent_usd: number;
+  calls: number;
+  spent_since_usd: number | null;
+  checked_at: number | null;
+  error: string | null;
+}
 export type ClearPeriod = "day" | "week" | "month" | "all";
 /** Словарь учится на правках: auto — сразу добавлять, suggest — спрашивать, off — выключено. */
 export type LearnMode = "auto" | "suggest" | "off";
@@ -47,6 +96,8 @@ export interface CoreHotkeys {
   insert_last: string;
   /** Сочетание «Скопировать последнее» (ctrl+alt+shift+c), "" — выключено. */
   copy_last: string;
+  /** Сочетание «Сменить раскладку выделенного» (shift+pause), "" — выключено. */
+  convert_layout: string;
 }
 
 export interface CoreState {
@@ -167,6 +218,7 @@ export interface Settings {
   /** Сочетания клавиш вида «ctrl+alt+shift+v»; "" — выключено. */
   insert_last_hotkey: string;
   copy_last_hotkey: string;
+  convert_layout_hotkey: string;
   /** Кнопка мыши для диктовки: "" — нет, middle — колёсико, x1/x2 — боковые. */
   mouse_button: MouseButton;
 
@@ -226,6 +278,10 @@ export interface Settings {
   default_style: string;
   history_enabled: boolean;
   history_retention_days: number;
+  /** Сколько последних записей голоса хранить на диске (0 — не сохранять), 0–500; по умолчанию 30. */
+  recordings_keep: number;
+  /** Сколько места записи голоса могут занять всего, МБ (20–20000); по умолчанию 300. */
+  recordings_max_mb: number;
   pill_enabled: boolean;
   pill_position: [number, number] | null;
   theme: ThemeMode;
@@ -240,6 +296,7 @@ export interface Settings {
 
   ai_enabled: boolean;
   ai_provider: AiProvider;
+  ai_keys: AiKeyEntry[];
   ai_model: string;
   anthropic_model: string;
   openai_base_url: string;
@@ -395,7 +452,7 @@ export interface AiUsageStats {
   by_model: { model: string; calls: number; cost_usd: number; unknown_cost_calls?: number }[];
 }
 
-/** Баланс ключа OpenRouter (кэш ядра 5 мин; force — проверить сейчас). */
+/** Баланс ключа, который сейчас первым в очереди (кэш ядра 5 мин; force — проверить сейчас). */
 export interface AiBalance {
   balance_usd: number | null;
   usage_usd: number | null;
@@ -404,6 +461,12 @@ export interface AiBalance {
   checked_at: number | null;
   /** Причина на языке интерфейса (нет ключа, ключ отвергнут, нет сети) или null. */
   error: string | null;
+  /** Чей это баланс. */
+  key_id?: string | null;
+  provider?: KeyProvider | null;
+  label?: string | null;
+  /** true — оценка (введённый остаток минус расход), не ответ провайдера. */
+  estimate?: boolean;
 }
 
 /** Событие после каждого вызова ИИ (в том числе неудачного — cost 0). */
@@ -470,6 +533,18 @@ export interface CommandMap {
   history_clear: { args: { period: ClearPeriod }; result: { deleted: number } };
   history_reinsert: { args: { id: number }; result: null };
   last_insert: { args: void; result: null };
+  recordings_list: {
+    args: void;
+    result: { items: RecordingItem[]; total_bytes: number; keep: number; max_bytes: number };
+  };
+  /** Распознать сохранённую запись заново: результат — в историю и «Вставить последнее». */
+  recording_transcribe: { args: { id: string }; result: RetranscribeResult };
+  recording_delete: { args: { id: string }; result: null };
+  /** Звук записи для прослушивания: WAV целиком в base64. */
+  recording_audio: { args: { id: string }; result: { mime: string; data: string } };
+  recordings_clear: { args: void; result: { deleted: number } };
+  /** Проводник: с id — выделить файл записи, без id — открыть папку записей. */
+  recording_reveal: { args: { id?: string }; result: null };
   dict_list: { args: void; result: DictItem[] };
   dict_upsert: { args: { id?: number; term: string; variants: string[] }; result: DictItem };
   dict_delete: { args: { id: number }; result: null };
@@ -513,6 +588,19 @@ export interface CommandMap {
   ai_key_set: { args: { provider: KeyProvider; key: string }; result: { masked: string } };
   ai_key_delete: { args: { provider: KeyProvider }; result: null };
   ai_key_check: { args: void; result: KeyCheck };
+  ai_keys_list: { args: void; result: AiKeyItem[] };
+  ai_key_add: {
+    args: { provider: CloudKeyProvider; key: string; label?: string; balance_usd?: number | null };
+    result: AiKeyItem;
+  };
+  ai_key_update: {
+    args: { id: string; label?: string; enabled?: boolean; balance_usd?: number | null };
+    result: AiKeyItem;
+  };
+  ai_key_replace: { args: { id: string; key: string }; result: AiKeyItem };
+  ai_key_remove: { args: { id: string }; result: null };
+  ai_keys_reorder: { args: { ids: string[] }; result: AiKeyItem[] };
+  ai_key_info: { args: { id: string; force?: boolean }; result: AiKeyInfo };
   ai_test: { args: { text: string; style: string }; result: AiTestResult };
   open_logs: { args: void; result: null };
 }
@@ -541,12 +629,41 @@ export interface ResultEvent {
   style: string;
 }
 
+/** Сохранённая запись голоса (последние N на диске, см. recordings_keep). Текста в ней нет. */
+export interface RecordingItem {
+  /** Имя файла без расширения: 20261107-183305-581. */
+  id: string;
+  /** Unix-время начала записи, с. */
+  ts: number;
+  duration_s: number;
+  bytes: number;
+  /** Процесс окна, куда диктовали ("" — неизвестно). */
+  app: string;
+  /** pending — распознаётся (или ядро упало посреди), ok — текст есть, empty — речи нет, error — сбой. */
+  status: "pending" | "ok" | "empty" | "error";
+  /** Сколько символов распознано. */
+  chars: number;
+  /** Запись истории с этим текстом (null — нет: история выключена или текста не было). */
+  history_id: number | null;
+}
+
+export interface RetranscribeResult {
+  id: string;
+  /** После словаря, сниппетов и ИИ; "" — речи нет. */
+  text: string;
+  raw: string;
+  language: string;
+  duration_s: number;
+  ai: boolean;
+}
+
 export type NoticeLevel = "info" | "warn" | "error";
 export type NoticeAction =
   | null
   | "relaunch_admin"
   | "open_settings_ai"
   | "open_settings_insert"
+  | "open_recordings"
   | "dict_undo"
   | "dict_add";
 

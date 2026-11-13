@@ -22,8 +22,8 @@
 автомат принял бы за автоповтор, но между ним и прошлым нажатием больше LOST_UP_MS, —
 это новое нажатие; прежняя запись отменяется (CANCEL), и начинается новая.
 
-Отдельно — сочетания «Вставить последнее» и «Скопировать последнее» (например,
-ctrl+alt+shift+v): основная клавиша сочетания проглатывается.
+Отдельно — сочетания «Вставить последнее», «Скопировать последнее» и «Сменить раскладку
+выделенного» (например, ctrl+alt+shift+v): основная клавиша сочетания проглатывается.
 """
 from __future__ import annotations
 
@@ -129,6 +129,7 @@ class Kind(Enum):
     COMMAND = auto()     # эта запись — инструкция командного режима
     INSERT_LAST = auto()  # сочетание «Вставить последнее»
     COPY_LAST = auto()    # сочетание «Скопировать последнее»
+    CONVERT_LAYOUT = auto()  # сочетание «Сменить раскладку выделенного»
 
 
 @dataclass(frozen=True)
@@ -264,7 +265,8 @@ class GestureMachine:
     def __init__(self, ptt: "KeySpec | tuple[KeyGroup, ...]", broadcast_mod: KeySpec,
                  cancel: KeySpec, tap_max_ms: int = 250, double_tap_ms: int = 400,
                  command_mod: KeySpec | None = None,
-                 insert_last: Chord | None = None, copy_last: Chord | None = None) -> None:
+                 insert_last: Chord | None = None, copy_last: Chord | None = None,
+                 convert_layout: Chord | None = None) -> None:
         self._lock = threading.Lock()
         self.state = _S.IDLE
         self._held: set[int] = set()
@@ -283,12 +285,12 @@ class GestureMachine:
         self.presses = 0
         self._chords: list[tuple[Kind, Chord]] = []
         self._apply(ptt, broadcast_mod, cancel, tap_max_ms, double_tap_ms, command_mod,
-                    insert_last, copy_last)
+                    insert_last, copy_last, convert_layout)
 
     def _apply(self, ptt: "KeySpec | tuple[KeyGroup, ...]", broadcast_mod: KeySpec,
                cancel: KeySpec, tap_max_ms: int, double_tap_ms: int,
                command_mod: KeySpec | None, insert_last: Chord | None,
-               copy_last: Chord | None) -> None:
+               copy_last: Chord | None, convert_layout: Chord | None = None) -> None:
         self.ptt_groups = _as_groups(ptt)
         self.ptt_vks: KeyGroup = frozenset().union(*self.ptt_groups)
         self.bmod = _as_group(broadcast_mod)
@@ -296,17 +298,19 @@ class GestureMachine:
         self.cmod = None if command_mod is None else _as_group(command_mod)
         self._gesture_mods: KeyGroup = self.bmod | (self.cmod or frozenset())
         self.tap_max, self.double_tap = tap_max_ms, double_tap_ms
-        pairs = ((Kind.INSERT_LAST, insert_last), (Kind.COPY_LAST, copy_last))
+        pairs = ((Kind.INSERT_LAST, insert_last), (Kind.COPY_LAST, copy_last),
+                 (Kind.CONVERT_LAYOUT, convert_layout))
         self._chords = [(k, c) for k, c in pairs if c is not None]
 
     def configure(self, ptt: "KeySpec | tuple[KeyGroup, ...]", broadcast_mod: KeySpec,
                   cancel: KeySpec, tap_max_ms: int, double_tap_ms: int,
                   command_mod: KeySpec | None = None,
-                  insert_last: Chord | None = None, copy_last: Chord | None = None) -> None:
+                  insert_last: Chord | None = None, copy_last: Chord | None = None,
+                  convert_layout: Chord | None = None) -> None:
         """Новые хоткеи на лету (из настроек). Незавершённый жест сбрасывается."""
         with self._lock:
             self._apply(ptt, broadcast_mod, cancel, tap_max_ms, double_tap_ms, command_mod,
-                        insert_last, copy_last)
+                        insert_last, copy_last, convert_layout)
             self.state = _S.IDLE
             self._last_tap_up = None
 
@@ -520,6 +524,16 @@ class GestureMachine:
             self.replay = [*mods, vk]
             self._swallowed -= set(mods)  # их физическое отпускание пусть дойдёт
 
+    def _end_held(self) -> None:
+        """Жест HELD прерван (Esc, чужое сочетание). Клавиатурный ждёт отпускания ptt;
+        начатый кнопкой мыши — сразу в покой: ptt никто не держит, и WAIT_UP не кончился бы
+        никогда (кнопка мыши в WAIT_UP ничего не делает)."""
+        if self._by_mouse:
+            self._by_mouse = False
+            self.state = _S.IDLE
+        else:
+            self.state = _S.WAIT_UP
+
     def _down(self, vk: int, t: int, became: bool) -> list[Action]:
         st = self.state
         if st is _S.IDLE:
@@ -540,7 +554,7 @@ class GestureMachine:
             if vk in self.cancel:
                 # Esc глотаем: с зажатым Ctrl система получила бы Ctrl+Esc и открыла «Пуск»
                 self._swallow(vk)
-                self.state = _S.WAIT_UP
+                self._end_held()
                 return [Action(Kind.CANCEL)]
             if vk in self.bmod:
                 self._swallow(vk)
@@ -559,7 +573,7 @@ class GestureMachine:
                 self.state = _S.HANDS_FREE
                 return []
             # сочетание (Ctrl+C и т. п.), а не диктовка
-            self.state = _S.WAIT_UP
+            self._end_held()
             self._last_tap_up = None
             return [Action(Kind.DISCARD)]
         if st is _S.HANDS_FREE:
@@ -693,6 +707,7 @@ class KeyboardHook:
         self._deskproc = w.WINEVENTPROC(self._desktop_event)
         self.paused = False
         self._alive_t = -1e9
+        self.error: str | None = None  # хук не поставился — текст ошибки для пользователя
 
     @property
     def running(self) -> bool:
@@ -701,7 +716,10 @@ class KeyboardHook:
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="rupor-hook", daemon=True)
         self._thread.start()
-        self._ready.wait(5)
+        if not self._ready.wait(5):
+            log.error("Хук клавиатуры не ответил за 5 с")
+        if self.error:
+            raise OSError(self.error)
         if self._rehook_when:
             threading.Thread(target=self._rdp_watch, name="rupor-rehook", daemon=True).start()
 
@@ -762,7 +780,18 @@ class KeyboardHook:
 
     def _run(self) -> None:
         self._tid = w.kernel32.GetCurrentThreadId()
-        self._install()
+        for attempt in range(3):
+            try:
+                self._install()
+                break
+            except OSError as e:
+                log.error("Хук клавиатуры не установлен (попытка %d): %s", attempt + 1, e)
+                if attempt == 2:
+                    # без хука поток не нужен; start() поднимет ошибку, ядро её покажет
+                    self.error = str(e)
+                    self._ready.set()
+                    return
+                time.sleep(0.2)
         win_hook = None
         if self._rehook_when:
             win_hook = w.user32.SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
@@ -775,7 +804,12 @@ class KeyboardHook:
         msg = wt.MSG()
         while w.user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             if msg.message == WM_APP_REHOOK:
-                self._install()
+                # Не вышло перевесить — работает прежний хук; падение здесь завершило бы
+                # поток и молча сняло все хоткеи
+                try:
+                    self._install()
+                except OSError as e:
+                    log.warning("Не удалось перевесить хук клавиатуры: %s", e)
                 continue
             if msg.message == WM_APP_MOUSEHOOK:
                 self._install_mouse()

@@ -47,7 +47,7 @@ def test_wal_and_schema_version(st: Storage, tmp_path: Path) -> None:
     con = sqlite3.connect(tmp_path / "rupor.db")
     try:
         assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert con.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
+        assert con.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 5
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"history", "dictionary", "snippets", "stats_daily", "kv", "ai_usage", "vocab",
                 "vocab_excluded"} <= tables
@@ -216,6 +216,18 @@ def test_search_cyrillic_case_insensitive(st: Storage) -> None:
     assert found("_") == ["Скидка 50% на user_name"]
     assert found("нет такого") == []
     assert len(found("   ")) == 4
+
+
+def test_search_with_very_long_query(st: Storage) -> None:
+    """Вставили в поиск абзац из тысячи слов: SQLite не падает «Expression tree is too large»,
+    поиск идёт по первым словам запроса."""
+    text = " ".join(f"слово{i}" for i in range(2000))
+    st.add_history(item(text))
+    st.add_history(item("другое"))
+    items, total = st.list_history(text, 50, 0)
+    assert total == 1 and items[0]["text"] == text
+    items, total = st.list_history("слово1 слово1 слово12", 50, 0)  # повторы и вложенные слова
+    assert total == 1
 
 
 def test_clear_history_periods(st: Storage) -> None:

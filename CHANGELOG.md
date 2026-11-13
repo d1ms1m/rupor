@@ -6,6 +6,70 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-08
+
+### Added
+
+- **Switch the layout of selected text.** Typed a password or a phrase in the wrong keyboard
+  layout? Select it and press **Shift+Pause**: the text is retyped in place as if it had
+  been typed in the other layout (US English ↔ Russian ЙЦУКЕН), "ghbdtn" ↔ "привет". The
+  direction is detected for each word; pressing again brings the original back. It is purely
+  mechanical — no AI, nothing goes to history or *Paste last*. The shortcut can be changed or
+  turned off in Settings → Dictation.
+- **Several AI keys, in priority order.** Settings → AI now holds a list of keys: OpenRouter and
+  Anthropic mixed, including several keys for the same provider. Drag a key (or use the arrows)
+  to change the order. Cleanup and command mode use the first key; if it fails (out of credit,
+  rejected, rate limit, provider outage, no network), Rupor moves straight on to the next one,
+  and the failed key waits at the end of the queue for a while. Each key can be turned off,
+  renamed, replaced or deleted.
+- **Balance for each key.** OpenRouter keys show the balance from OpenRouter. Anthropic doesn't
+  report a balance through its API, so you can enter the balance from the Console and Rupor shows
+  an estimate: that amount minus what Rupor has spent through the key since. The AI spending card
+  shows the balance of the key that is first in line.
+- **The last 30 voice recordings are kept on disk** (`%APPDATA%\Rupor\recordings`, WAV,
+  up to 300 MB in total; both limits are in Settings → History, 0 keeps none). Each dictation
+  is saved before recognition, so a dictation whose text was lost can be transcribed again
+  under the new **History → Recordings** tab. The result goes to History and to *Insert last*.
+  A long recording that produced no text now says it was saved and links to it.
+- **Play a recording.** History → Recordings has *Play / Stop* on every recording, and each
+  dictation in History that still has its recording gets a play button.
+
+### Changed
+
+- Existing OpenRouter and Anthropic keys move into the new list automatically, with the provider
+  you had selected first.
+- Spending for Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 is now counted at their own prices
+  (Opus 5.5 was priced as Opus 5 before, Haiku 5.5 was not counted at all).
+
+### Fixed
+
+- Claude Haiku 5.5 works for cleanup: Rupor no longer sends it `temperature`, which the model
+  rejects (before, every call failed and went to the next key).
+- **The AI no longer adds its own notes to the text.** A model could append "Note: …" explaining
+  why it did not apply a rule. The prompt now forbids it, and such a trailing note that you did
+  not dictate is removed.
+- The clipboard is restored when pasting fails (focus lost, locked screen, UAC), instead of
+  keeping the dictation in it.
+- Shortcuts no longer stop working silently: if the keyboard hook can't be installed, Rupor
+  retries and then says so.
+- A settings file held by an antivirus or OneDrive no longer stops the engine or resets the
+  settings; a broken settings file is kept next to it (`settings.broken-<time>.json`), and the AI
+  keys stay in the list.
+- A microphone that disappears while recording no longer leaves the audio stream open; a sound
+  that can't be played no longer breaks a recording.
+- Dictionary terms with their own capitalisation ("iPhone", "macOS") are no longer turned into
+  "IPhone" at the start of a sentence.
+- The mouse button used for dictation works again after Esc; "Miro" is no longer heard as «мир».
+- Searching History with a long query (a pasted paragraph) no longer fails, and a TLS drop
+  during the CUDA download is retried like any other dropped connection.
+- **Long dictations no longer vanish as "garbage".** The loop detector measured how well the
+  whole text compressed; ordinary Russian text longer than about 2,000 characters
+  (2.5 minutes of speech) compresses past Whisper's threshold with no repetition at all, so a
+  153-second dictation was thrown away as "No speech detected". Compression is now checked in
+  400-character windows, like Whisper's own 30-second segments. And when both passes still look
+  like garbage only because of a stray foreign glyph, the text is cleaned and inserted instead
+  of dropped.
+
 ## [0.4.3] — 2026-10-18
 
 ### Fixed
@@ -194,6 +258,7 @@ First public release.
 - Tray icon, start with Windows, light and dark themes, first-run wizard; a per-user NSIS
   installer without administrator rights.
 
+[0.6.0]: https://github.com/listapad2024/rupor/compare/v0.4.3...v0.6.0
 [0.4.3]: https://github.com/listapad2024/rupor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/listapad2024/rupor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/listapad2024/rupor/compare/v0.4.0...v0.4.1

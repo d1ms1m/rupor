@@ -89,7 +89,8 @@
   "notice": {
     "relaunchAdmin": "Restart as administrator",
     "openAiSettings": "Open AI settings",
-    "openRdpSettings": "Choose sessions"
+    "openRdpSettings": "Choose sessions",
+    "openRecordings": "Open recordings"
   },
   "tray": {
     "aiLine": "AI: today {today} · balance {balance}",
@@ -258,7 +259,8 @@
       "command": "Command mode",
       "cancel": "Cancel recording",
       "insertLast": "Paste last",
-      "copyLast": "Copy last"
+      "copyLast": "Copy last",
+      "convertLayout": "Switch layout of selection"
     },
     "system": {
       "title": "Status",
@@ -277,7 +279,8 @@
     "subtitle": "Every dictation — searchable and ready to insert again — plus a draft for longer notes.",
     "tabs": {
       "feed": "Timeline",
-      "draft": "Draft"
+      "draft": "Draft",
+      "recordings": "Recordings"
     },
     "search": "Search text and apps",
     "clear": {
@@ -323,6 +326,31 @@
     "end": "That's everything",
     "moreError": "Couldn't load older dictations",
     "reinserted": "Text inserted into the last active window",
+    "rec": {
+      "play": "Play",
+      "stop": "Stop",
+      "playError": "Couldn't play the recording",
+      "intro": "Recent voice recordings are kept on disk: if a dictation wasn't recognized or the text got lost, you can transcribe it again.",
+      "usage": "{n} of {keep} · {size} of {max}",
+      "off": "Saving recordings is off: new dictations don't show up here.",
+      "settings": "Settings",
+      "folder": "Open folder",
+      "clear": "Delete all",
+      "clearConfirm": "Delete all saved voice recordings?",
+      "clearBody": "The files will be deleted permanently. Dictation history stays.",
+      "transcribe": "Transcribe again",
+      "transcribing": "Transcribing…",
+      "reveal": "Show in Explorer",
+      "delete": "Delete",
+      "statusPending": "Not transcribed",
+      "statusOk": "{n} chars",
+      "statusEmpty": "No speech detected",
+      "statusError": "Recognition error",
+      "result": "Transcribed: the text is in History and in “Insert last”",
+      "resultEmpty": "No speech detected this time either",
+      "emptyTitle": "No recordings yet",
+      "emptyText": "Your recent voice recordings will appear here."
+    },
     "expand": "Show more",
     "collapse": "Show less",
     "processed": "Cleaned up",
@@ -334,6 +362,7 @@
       "test": "Test"
     },
     "actions": {
+      "play": "Play the recording",
       "copy": "Copy",
       "reinsert": "Insert again",
       "delete": "Delete"
@@ -625,6 +654,8 @@
       "insertLastHint": "Inserts the last transcribed text into the active window.",
       "copyLast": "Copy last",
       "copyLastHint": "Puts the last transcribed text on the clipboard.",
+      "convertLayout": "Switch layout of selection",
+      "convertLayoutHint": "Selected text typed in the wrong keyboard layout is fixed in place: “ghbdtn” ↔ the Russian word it was meant to be. No AI.",
       "chordSaved": "Shortcut “{key}” saved",
       "chordOff": "Shortcut turned off",
       "keySaved": "Key “{key}” saved",
@@ -751,7 +782,8 @@
         "openrouter": "OpenRouter",
         "anthropic": "Anthropic",
         "ollama": "Ollama (offline)",
-        "openai_compatible": "OpenAI API"
+        "openai_compatible": "OpenAI API",
+        "keys": "Keys by priority"
       },
       "openaiProviderHint": "For services with an OpenAI-compatible API, such as DeepSeek.",
       "key": "API key",
@@ -792,7 +824,16 @@
       "openai_cached_input_price": "Cached input",
       "priceUnset": "Not set",
       "priceInvalid": "Enter a finite non-negative number.",
-      "commandOpenaiText": "The same model, key and parameters as cleanup."
+      "commandOpenaiText": "The same model, key and parameters as cleanup.",
+      "cloud": "Cloud keys",
+      "keysTitle": "Keys and order",
+      "keysHint": "Top to bottom: if a key fails (out of credit, rejected, rate limit, provider outage), Rupor moves straight on to the next one. Drag or use the arrows to change the order.",
+      "onlyProvider": "Only {name} keys are used right now.",
+      "useAll": "Use all keys in order",
+      "modelOpenrouter": "OpenRouter model",
+      "modelAnthropic": "Anthropic model",
+      "commandKeys": "Keys by priority",
+      "commandKeysText": "The same keys, order and models as cleanup."
     },
     "history": {
       "title": "Dictation history",
@@ -803,7 +844,13 @@
       "forever": "Forever",
       "clear": "Clear history",
       "clearHint": "Delete entries from the last day, week, month, or everything at once.",
-      "openHistory": "Open history"
+      "openHistory": "Open history",
+      "recKeep": "Keep recent voice recordings",
+      "recKeepHint": "So a failed dictation isn't lost: transcribe it again under History → Recordings. “Don't keep” deletes the saved ones right away.",
+      "recOff": "Don't keep",
+      "recLimit": "Space for recordings",
+      "recLimitHint": "Older recordings are deleted when there are more of them or they take more space. A minute of audio ≈ 1.9 MB.",
+      "openRecordings": "Open recordings"
     },
     "about": {
       "tagline": "Local voice dictation into any Windows app, including RDP.",
@@ -855,7 +902,9 @@
       "insertLast": "Paste last",
       "insertLastText": "Insert the last transcribed text again — for example, if it went to the wrong window.",
       "copyLast": "Copy last",
-      "copyLastText": "Put the last transcribed text on the clipboard."
+      "copyLastText": "Put the last transcribed text on the clipboard.",
+      "convertLayout": "Switch layout of selection",
+      "convertLayoutText": "Typed a password or phrase in the wrong layout (English ↔ Russian)? Select it and press the shortcut to retype it in the other layout. The direction is detected automatically, no AI."
     },
     "modesTitle": "Insert methods",
     "modes": {
@@ -936,12 +985,14 @@
       "text": "Stats show up here after your first AI requests."
     },
     "balance": {
-      "title": "OpenRouter balance",
+      "title": "Balance",
       "checked": "Checked {ago}",
       "notChecked": "Not checked yet",
       "usage": "{v} spent on this key",
       "limit": "key limit {v}",
-      "noLimit": "no limit"
+      "noLimit": "no limit",
+      "titleKey": "Balance · {name}",
+      "estimate": "estimate: the balance you entered minus what Rupor spent"
     },
     "home": {
       "title": "AI cleanup",
@@ -1181,6 +1232,62 @@
     "chooseSessions": "Choose sessions",
     "command": "command",
     "relaunchAdmin": "Restart as administrator",
-    "openSettings": "AI settings"
+    "openSettings": "AI settings",
+    "openRecordings": "Recordings"
+  },
+  "aiKeys": {
+    "add": "Add key",
+    "addTitle": "New key",
+    "provider": "Provider",
+    "label": "Label",
+    "labelPlaceholder": "For example, “Personal” or “Work”",
+    "key": "API key",
+    "balance": "Account balance, $",
+    "balancePlaceholder": "optional",
+    "balanceHint": "Anthropic doesn't report the balance through its API. Enter the balance from the Console and Rupor will subtract what it spends.",
+    "save": "Add",
+    "cancel": "Cancel",
+    "empty": "No keys yet",
+    "emptyHint": "Add an OpenRouter or Anthropic key. You can add several, including several keys for one provider.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "drag": "Drag to change the priority",
+    "first": "First",
+    "off": "Off",
+    "noSecret": "The key isn't in Credential Manager",
+    "paused": "Skipped until {time}: {reason}",
+    "balanceApi": "Balance",
+    "balanceEstimate": "≈ left (estimate)",
+    "balanceUnavailable": "No balance through the API",
+    "spent": "Rupor spent {v}",
+    "spentSince": "You entered a balance of {balance}; Rupor has spent {v} since then",
+    "setBalance": "Enter balance",
+    "editBalance": "Change balance",
+    "clearBalance": "Remove balance",
+    "rename": "Rename",
+    "replace": "Replace key",
+    "enable": "Turn on",
+    "disable": "Turn off",
+    "remove": "Delete",
+    "removeTitle": "Delete key “{name}”?",
+    "removeBody": "The key will be deleted from Windows Credential Manager.",
+    "check": "Check key and balance",
+    "added": "Key added",
+    "saveError": "Couldn't save",
+    "actions": "Key actions",
+    "invalid": "The key didn't pass the check",
+    "checked": "Checked {ago}",
+    "apply": "Save",
+    "reasons": {
+      "auth": "key rejected",
+      "payment": "out of credit",
+      "forbidden": "access denied",
+      "rate_limit": "rate limit",
+      "server": "provider outage",
+      "network": "no network",
+      "timeout": "didn't answer in time",
+      "no_key": "no key",
+      "bad_request": "request error"
+    }
   }
 }

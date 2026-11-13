@@ -189,6 +189,7 @@ use the model that is already there.
 | Cancel recording | **Esc** while recording |
 | Paste last | **Ctrl+Alt+Shift+V** (or the tray menu item) |
 | Copy last | **Ctrl+Alt+Shift+C** |
+| Switch layout of selection | select text typed in the wrong layout (English ↔ Russian) and press **Shift+Pause** to retype it in the other one (no AI) |
 
 All keys can be changed in Settings → Dictation and apply immediately, without a restart. The
 dictation key can be a combination of modifiers (Ctrl+Alt…) or a single key (Right Ctrl, F13…).
@@ -355,8 +356,9 @@ the logs.
 AI cleanup is **off** by default: without it Rupor works fully offline. Turn it on in
 Settings → AI.
 
-- **Provider.** The default is [OpenRouter](https://openrouter.ai) with
-  `anthropic/claude-haiku-4.5` (you can change the model). The Anthropic API directly (with your
+- **Provider.** The default is the cloud-key chain, with OpenRouter and Anthropic keys tried
+  in priority order. [OpenRouter](https://openrouter.ai) uses `anthropic/claude-haiku-4.5`
+  by default (you can change the model). The Anthropic API directly (with your
   own key), [Ollama](https://ollama.com) — a local model, fully offline — and a configurable
   **OpenAI-compatible API** are supported too. For the latter, enter the base URL before
   `/chat/completions`, the model and an optional key. DeepSeek example: `https://api.deepseek.com`,
@@ -371,10 +373,17 @@ Settings → AI.
   persist when settings change. Update tariffs manually when changing models, services or prices.
   You need **your own account** with the provider: requests are billed to your balance. One
   cleanup costs around $0.001 (measurements are in [docs/BENCH.md](docs/BENCH.md)).
-- **The key** is stored only in Windows Credential Manager (entries `Rupor/openrouter`,
-  `Rupor/anthropic`, `Rupor/openai_compatible`). Paste it in Settings or import it from a `.env` file with an
-  `openrouter_api_key` variable. The interface shows only a mask like `sk-or-v1-…XYZ`; the key
-  never gets into logs or history.
+- **Keys in priority order.** You can add several keys: OpenRouter and Anthropic mixed,
+  including several keys for one provider. Drag to change the order. The first key does the
+  work; if it fails (out of credit, rejected, rate limit, provider outage, no network), Rupor
+  moves straight on to the next one, and the failed key waits at the end of the queue for a while.
+- **Balance** is shown for each key. OpenRouter reports it through its API. Anthropic doesn't:
+  enter the balance from the Console and Rupor shows an estimate, that amount minus what it has
+  spent through the key.
+- **Keys** are stored only in Windows Credential Manager (entries `Rupor/openrouter`,
+  `Rupor/anthropic`, `Rupor/openai_compatible`, and `Rupor/<provider>/<id>` for further keys). Paste a key in Settings or
+  import it from a `.env` file with an `openrouter_api_key` variable. The interface shows only a
+  mask like `sk-or-v1-…XYZ`; keys never get into logs or history.
 - **Styles**: As is (no AI), Standard, Business, Chat message, Code / prompt. The style comes
   from the app rule; otherwise the default style is used.
 - **Language**: the prompt matches the dictated text. English dictation gets an English prompt
@@ -402,7 +411,10 @@ OpenRouter. With Ollama everything stays on your computer.
 
 ## Privacy and data
 
-- **Recognition is local.** Microphone audio is processed on your computer and never stored.
+- **Recognition is local.** Microphone audio is processed on your computer and never leaves it.
+  The last 30 recordings (up to 300 MB in total) are kept on disk so that a failed dictation
+  isn't lost: you can transcribe it again under History → Recordings. Set the count to 0 in
+  Settings → History to keep none.
 - **No telemetry or analytics.** Rupor goes online only for the model (Hugging Face) and cuBLAS
   (PyPI) on first launch, and to your AI provider if AI is on.
 - **Dictated text isn't written to logs**: only text lengths, timings and program names.
@@ -415,6 +427,7 @@ OpenRouter. With Ollama everything stays on your computer.
 | Settings | `%APPDATA%\Rupor\settings.json` |
 | History, dictionary, snippets, stats, draft, AI spending, frequent words | `%APPDATA%\Rupor\rupor.db` (SQLite) |
 | Logs (rotated; log messages are in Russian) | `%APPDATA%\Rupor\logs\` (`rupor.log`, `ui.log`, `crash.log`) |
+| Recent voice recordings (WAV, rotated) | `%APPDATA%\Rupor\recordings\` |
 | Volume of lowered apps (only while recording) | `%APPDATA%\Rupor\duck.json` |
 | Speech model | `%USERPROFILE%\.cache\huggingface\hub` or your own folder (`model_dir`, see [Model folder](#model-folder)) |
 | CUDA libraries | `%LOCALAPPDATA%\Rupor\cuda` |
@@ -453,9 +466,10 @@ Everything is configured in the Rupor window. You can also edit
 | `duck_mode`, `duck_level` | other apps' audio while recording: `duck` (lower to `duck_level` percent, 15 by default) / `mute` / `off` |
 | `unload_after_min` | unload the model from video memory after N minutes idle (0 — never) |
 | `history_enabled`, `history_retention_days` | history and how long to keep it (0 — forever) |
+| `recordings_keep`, `recordings_max_mb` | how many recent voice recordings to keep on disk (30; 0 — none) and how much space they may take in total (300 MB) |
 | `default_style`, `ai_enabled`, `ai_provider`, `ai_model`, `ai_mode`, `ai_min_words`, `ai_timeout_s` | AI cleanup |
 | `ai_provider_order` | preferred providers inside OpenRouter, e.g. `["google-vertex", "amazon-bedrock"]` |
-| `command_provider` | command mode: `openrouter`, `claude_cli`, `anthropic`, `ollama`, `openai_compatible` |
+| `command_provider` | command mode: `keys` (default), `openrouter`, `claude_cli`, `anthropic`, `ollama`, `openai_compatible` |
 | `openai_base_url`, `openai_model`, `openai_extra_json` | compatible API address, model and extra JSON parameters |
 | `openai_input_price`, `openai_output_price`, `openai_cached_input_price` | manual USD-per-million tariffs; `null` means unset |
 | `env_path` | path to a `.env` file with `openrouter_api_key` for importing the key; optional, empty by default |

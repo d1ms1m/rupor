@@ -6,6 +6,7 @@ Manager и открытие проводника подменены — тест
 и не трогают его ключи; настройки, база и логи — во временной папке (APPDATA)."""
 from __future__ import annotations
 
+import base64
 import json
 import os
 import threading
@@ -471,7 +472,105 @@ def test_history_disabled_but_stats_counted(env: Env) -> None:
     c.close()
 
 
+# ---------- сохранённые записи голоса ----------
+
+def test_recordings_saved_rotated_and_retranscribed(env: Env) -> None:
+    c = env.client()
+    c.call("set_settings", {"patch": {"recordings_keep": 2}})
+    c.mark()
+    env.dictate("первая")
+    c.wait_event("history")
+    env.dictate("вторая")
+    c.wait_event("history")
+    env.dictate("третья")
+    h3 = c.wait_event("history")
+    got = c.call("recordings_list")
+    assert got["keep"] == 2 and got["max_bytes"] == 300 * 1024 * 1024
+    items = got["items"]
+    assert len(items) == 2 and got["total_bytes"] == sum(i["bytes"] for i in items)
+    assert set(items[0]) >= {"id", "ts", "duration_s", "bytes", "app", "status", "chars",
+                             "history_id"}
+    newest = items[0]
+    assert newest["status"] == "ok" and newest["chars"] == len("третья")
+    assert newest["history_id"] == h3["id"] and newest["app"] == "notepad.exe"
+    assert (env.tmp / "recordings" / f"{newest['id']}.wav").exists()
+    # распознать заново: в историю и в «Вставить последнее», но не в окно и не в статистику
+    words = c.call("stats_get")["words_today"]
+    env.calls.delivered.clear()
+    env.rec.texts.append("третья, но целиком")
+    r = c.call("recording_transcribe", {"id": newest["id"]})
+    assert r["text"] == "третья, но целиком" and r["raw"] == "третья, но целиком"
+    assert r["id"] == newest["id"] and r["duration_s"] == 1.0
+    assert c.call("history_list")["items"][0]["text"] == "третья, но целиком"
+    assert env.calls.delivered == []
+    assert c.call("stats_get")["words_today"] == words
+    assert env.eng.last_text == "третья, но целиком"
+    # прослушать: WAV целиком, тот же файл
+    snd = c.call("recording_audio", {"id": newest["id"]})
+    assert snd["mime"] == "audio/wav"
+    assert base64.b64decode(snd["data"]) == (
+        env.tmp / "recordings" / f"{newest['id']}.wav").read_bytes()
+    assert "не найдена" in c.error("recording_audio", {"id": "../rupor.db"})
+    # ошибки и удаление
+    assert "не найдена" in c.error("recording_transcribe", {"id": "20200101-000000-000"})
+    assert "не найдена" in c.error("recording_transcribe", {"id": "../rupor.db"})
+    c.call("recording_delete", {"id": newest["id"]})
+    assert [i["id"] for i in c.call("recordings_list")["items"]] == [items[1]["id"]]
+    assert c.call("recordings_clear") == {"deleted": 1}
+    assert c.call("recordings_list")["items"] == []
+    c.call("recording_reveal", {})
+    assert env.calls.opened and env.calls.opened[-1].endswith("recordings")
+    c.close()
+
+
+def test_lost_long_dictation_is_kept_on_disk(env: Env) -> None:
+    """Длинная запись без текста (распознавание выбросило) — не пропадает: запись на диске,
+    уведомление ведёт к ней."""
+    c = env.client()
+    env.recorder.seconds = 6.0
+    c.mark()
+    env.dictate("")
+    n = c.wait_event("notice", lambda d: d.get("action") == "open_recordings")
+    assert "Запись сохранена" in n["text"] and n["level"] == "warn"
+    [item] = c.call("recordings_list")["items"]
+    assert item["status"] == "empty" and item["duration_s"] == 6.0
+    env.rec.texts.append("вот она, длинная мысль")
+    assert c.call("recording_transcribe", {"id": item["id"]})["text"] == "вот она, длинная мысль"
+    assert c.call("recordings_list")["items"][0]["status"] == "ok"
+    c.close()
+
+
+def test_recordings_off_saves_nothing_and_deletes(env: Env) -> None:
+    c = env.client()
+    c.mark()
+    env.dictate("раз")
+    c.wait_event("history")
+    assert len(c.call("recordings_list")["items"]) == 1
+    c.call("set_settings", {"patch": {"recordings_keep": 0}})
+    deadline = time.monotonic() + 5
+    while c.call("recordings_list")["items"] and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert c.call("recordings_list")["items"] == []
+    env.dictate("два")
+    c.wait_event("history")
+    assert c.call("recordings_list")["items"] == []
+    assert "от 0 до 500" in c.error("set_settings", {"patch": {"recordings_keep": 501}})
+    c.close()
+
+
 # ---------- конвейер диктовки ----------
+
+def test_custom_key_stays_outside_cloud_key_chain(env: Env) -> None:
+    c = env.client()
+    c.call("ai_key_set", {"provider": "openai_compatible", "key": "custom-test-key"})
+    assert c.call("ai_key_status", {"provider": "openai_compatible"})["has_key"]
+    assert env.eng.s.ai_keys == []
+    assert env.calls.creds == {"Rupor/openai_compatible": "custom-test-key"}
+    c.call("ai_key_delete", {"provider": "openai_compatible"})
+    assert not c.call("ai_key_status", {"provider": "openai_compatible"})["has_key"]
+    assert env.calls.creds == {}
+    c.close()
+
 
 def _enable_ai(c: Client, **extra: Any) -> None:
     c.call("ai_key_set", {"provider": "openrouter", "key": FAKE_KEY})
@@ -687,6 +786,44 @@ def test_command_mode_without_selection(env: Env) -> None:
     n = c.wait_event("notice", lambda d: d["level"] == "warn")
     assert n["text"] == "Выделите текст для командного режима"
     assert env.calls.commands == [] and env.calls.delivered == []
+    c.close()
+
+
+def test_convert_layout_of_selection(env: Env) -> None:
+    env.calls.selection = "Ghbdtn? vbh/"
+    c = env.client()
+    c.mark()
+    env.eng._on_actions([Action(Kind.CONVERT_LAYOUT)])
+    assert env.calls.event.wait(5)
+    # поверх выделения, без пробела в конце; без ИИ, не в историю и не в «Вставить последнее»
+    assert env.calls.delivered == [("Привет, мир.", False)]
+    assert env.calls.commands == [] and env.calls.cleanup == []
+    assert env.eng.last_text == ""
+    c.close()
+
+
+@pytest.mark.parametrize("selection, text", [
+    (None, "Выделите текст, раскладку которого нужно сменить"),
+    ("   ", "Выделите текст, раскладку которого нужно сменить"),
+    ("123 + 456", "В выделенном тексте нечего переводить в другую раскладку"),
+])
+def test_convert_layout_nothing_to_do(env: Env, selection: str | None, text: str) -> None:
+    env.calls.selection = selection
+    c = env.client()
+    c.mark()
+    env.eng._on_actions([Action(Kind.CONVERT_LAYOUT)])
+    n = c.wait_event("notice", lambda d: d["level"] == "warn")
+    assert n["text"] == text
+    assert env.calls.delivered == []
+    c.close()
+
+
+def test_convert_layout_hotkey_in_state(env: Env) -> None:
+    c = env.client()
+    assert c.call("get_state")["hotkeys"]["convert_layout"] == "shift+pause"
+    c.call("set_settings", {"patch": {"convert_layout_hotkey": ""}})   # выключить
+    assert c.call("get_state")["hotkeys"]["convert_layout"] == ""
+    assert all(k is not Kind.CONVERT_LAYOUT for k, _ in env.eng.machine._chords)
     c.close()
 
 

@@ -102,6 +102,8 @@ def test_apply_patch_ok_and_changed_keys() -> None:
     ({"app_rules": {"c:\\a.exe": {"insert_mode": None, "style": None}}}, "имя процесса"),
     ({"insert_last_hotkey": "v"}, "Вставить последнее"),
     ({"copy_last_hotkey": "ctrl+alt+shift+v"}, "совпадают"),
+    ({"convert_layout_hotkey": "shift+alt+ctrl+c"}, "совпадают"),   # то же, другой порядок
+    ({"convert_layout_hotkey": "l"}, "Сменить раскладку"),
     ({"ollama_url": "localhost:11434"}, "Адрес Ollama"),
     ({"terms": "ClickHouse"}, "Термины"),
 ])
@@ -170,7 +172,78 @@ def test_load_broken_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     d.mkdir()
     (d / "settings.json").write_text("{не json", encoding="utf-8")
     s = config.load()
+    # умолчания, а ключи ИИ (они в Credential Manager, не в файле) — прежние цели в списке
+    assert [e["id"] for e in s.ai_keys] == ["openrouter", "anthropic"]
+    s.ai_keys = []
     assert s == Settings()
+    # испорченный файл отложен рядом, а не затёрт умолчаниями
+    kept = list(d.glob("settings.broken-*.json"))
+    assert len(kept) == 1 and kept[0].read_text(encoding="utf-8") == "{не json"
+    assert json.loads((d / "settings.json").read_text(encoding="utf-8"))["ptt_key"] == "ctrl+win"
+
+
+def test_load_unreadable_file_is_not_overwritten(tmp_path: Path,
+                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    d = tmp_path / "Rupor"
+    d.mkdir()
+    p = d / "settings.json"
+    p.write_text(json.dumps({"default_style": "code", "app_rules": {}}), encoding="utf-8")
+    real = Path.read_text
+
+    def locked(self: Path, *a: object, **k: object) -> str:
+        if self == p:
+            raise PermissionError(13, "файл занят")
+        return real(self, *a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", locked)
+    assert config.load() == Settings()          # на этот запуск — умолчания
+    monkeypatch.setattr(Path, "read_text", real)
+    assert json.loads(p.read_text(encoding="utf-8"))["default_style"] == "code"  # файл цел
+    assert not list(d.glob("settings.broken-*.json"))
+
+
+def test_load_survives_locked_settings_file(tmp_path: Path,
+                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    """settings.json держит антивирус или OneDrive: запись ждёт и повторяет, а если файл так
+    и не освободился — ядро всё равно стартует с прочитанными настройками."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr(config.time, "sleep", lambda s: None)
+    d = tmp_path / "Rupor"
+    d.mkdir()
+    p = d / "settings.json"
+    p.write_text(json.dumps({"default_style": "code", "app_rules": {}}), encoding="utf-8")
+    real = Path.replace
+    busy = {"left": 2}
+
+    def replace(self: Path, target: object) -> Path:
+        if Path(str(target)) == p and busy["left"]:
+            busy["left"] -= 1
+            raise PermissionError(32, "файл занят")
+        return real(self, target)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "replace", replace)
+    s = config.load()                           # два отказа, потом получилось
+    assert s.default_style == "code" and busy["left"] == 0
+    assert "ptt_key" in json.loads(p.read_text(encoding="utf-8"))  # дописан
+
+    busy["left"] = 100                          # занят надолго
+    s = config.load()
+    assert s.default_style == "code"            # не упал, настройки пользователя на месте
+
+
+def test_load_old_file_with_bad_cancel_key(tmp_path: Path,
+                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    # миграция хоткеев v1 видит ещё не проверенные значения: cancel_key: null не роняет ядро
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    d = tmp_path / "Rupor"
+    d.mkdir()
+    (d / "settings.json").write_text(json.dumps({
+        "broadcast_targets": [], "hotkeys_version": 1, "ptt_key": "rctrl",
+        "broadcast_modifier": "rshift", "command_modifier": "ralt", "cancel_key": None,
+    }), encoding="utf-8")
+    s = config.load()
+    assert s.cancel_key == "esc"
 
 
 def test_conflicting_hotkeys_in_file_fall_back(tmp_path: Path,

@@ -32,7 +32,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DuckSection } from "../components/Duck";
 import { CommitInput, Stepper } from "../components/fields";
 import { ChordCapture, HotkeyCapture } from "../components/HotkeyCapture";
-import { KeyManager } from "../components/KeyManager";
+import { KeyChain } from "../components/KeyChain";
 import { LearnModePicker } from "../components/Learn";
 import { LevelBar } from "../components/Level";
 import { Logo } from "../components/Logo";
@@ -50,6 +50,7 @@ import { Tabs } from "../components/ui/tabs";
 import { useToast } from "../components/ui/toast";
 import { languageName, NATIVE_NAMES, systemLocale, t, tp, type TKey } from "../i18n";
 import { cn } from "../lib/cn";
+import { fmtMb } from "../lib/format";
 import { useLoad, useMicMonitor } from "../lib/hooks";
 import { errorText } from "../lib/hub";
 import { comboParts, keyLabel } from "../lib/keys";
@@ -297,10 +298,11 @@ function Dictation({ s, set }: SectionProps) {
     { k: "command_modifier", title: t("settings.dictation.command"), hint: t("settings.dictation.commandHint") },
     { k: "cancel_key", title: t("settings.dictation.cancel"), hint: t("settings.dictation.cancelHint") },
   ];
-  // «Вставить последнее» / «Скопировать последнее» — сочетания с модификаторами (ТЗ)
-  const chords: { k: "insert_last_hotkey" | "copy_last_hotkey"; title: string; hint: string }[] = [
+  // «Вставить последнее» / «Скопировать последнее» / «Сменить раскладку» — сочетания с модификаторами (ТЗ)
+  const chords: { k: "insert_last_hotkey" | "copy_last_hotkey" | "convert_layout_hotkey"; title: string; hint: string }[] = [
     { k: "insert_last_hotkey", title: t("settings.dictation.insertLast"), hint: t("settings.dictation.insertLastHint") },
     { k: "copy_last_hotkey", title: t("settings.dictation.copyLast"), hint: t("settings.dictation.copyLastHint") },
+    { k: "convert_layout_hotkey", title: t("settings.dictation.convertLayout"), hint: t("settings.dictation.convertLayoutHint") },
   ];
   const values = keys.map((x) => String(s[x.k] ?? ""));
   const dup = values.find((v, i) => v && values.indexOf(v) !== i);
@@ -786,6 +788,9 @@ const PROVIDER_ORDER_SUGGESTIONS = ["amazon-bedrock", "anthropic", "google-verte
 function Ai({ s, set }: SectionProps) {
   const [timeout, setTimeoutV] = useState(s.ai_timeout_s);
   useEffect(() => setTimeoutV(s.ai_timeout_s), [s.ai_timeout_s]);
+  // Поля моделей — для провайдеров, ключи которых есть в списке (нет ключей — оба)
+  const hasOR = s.ai_keys.some((k) => k.provider === "openrouter");
+  const hasAnthropic = s.ai_keys.some((k) => k.provider === "anthropic");
 
   return (
     <>
@@ -815,11 +820,10 @@ function Ai({ s, set }: SectionProps) {
           <div className="border-b border-line px-5 py-4">
             <Segmented
               full
-              value={s.ai_provider}
+              value={s.ai_provider === "openrouter" || s.ai_provider === "anthropic" ? "keys" : s.ai_provider}
               onChange={(v) => void set({ ai_provider: v })}
               options={[
-                { value: "openrouter", label: t("settings.ai.providers.openrouter") },
-                { value: "anthropic", label: t("settings.ai.providers.anthropic") },
+                { value: "keys", label: t("settings.ai.cloud") },
                 { value: "openai_compatible", label: t("settings.ai.providers.openai_compatible") },
                 { value: "ollama", label: t("settings.ai.providers.ollama") },
               ]}
@@ -836,45 +840,52 @@ function Ai({ s, set }: SectionProps) {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              {s.ai_provider === "openrouter" && (
+              {s.ai_provider !== "ollama" && s.ai_provider !== "openai_compatible" && (
                 <>
-                  <SettingRow stacked title={t("settings.ai.key")} description={t("settings.ai.keyHint")}>
-                    <KeyManager provider="openrouter" />
+                  <SettingRow stacked title={t("settings.ai.keysTitle")} description={t("settings.ai.keysHint")}>
+                    {(s.ai_provider === "openrouter" || s.ai_provider === "anthropic") && (
+                      <div className="mb-2.5 flex items-center justify-between gap-3 rounded-xl bg-info/8 px-3.5 py-2.5 text-[12.5px] text-fg">
+                        <span>{t("settings.ai.onlyProvider", { name: t(`settings.ai.providers.${s.ai_provider}`) })}</span>
+                        <Button size="sm" variant="soft" onClick={() => void set({ ai_provider: "keys" })}>
+                          {t("settings.ai.useAll")}
+                        </Button>
+                      </div>
+                    )}
+                    <KeyChain />
                   </SettingRow>
-                  <SettingRow title={t("settings.ai.model")} description={t("settings.ai.modelHint")}>
-                    <CommitInput mono className="w-[300px]" value={s.ai_model} onCommit={(v) => void set({ ai_model: v })} />
-                  </SettingRow>
-                  <SettingRow stacked title={t("settings.ai.order")} description={t("settings.ai.orderHint")}>
-                    <ChipInput
-                      mono
-                      values={s.ai_provider_order}
-                      onChange={(v) => void set({ ai_provider_order: v })}
-                      placeholder={t("settings.ai.orderPlaceholder")}
-                    />
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[12px] text-subtle">{t("settings.ai.orderSuggest")}</span>
-                      {PROVIDER_ORDER_SUGGESTIONS.filter((p) => !s.ai_provider_order.includes(p)).map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => void set({ ai_provider_order: [...s.ai_provider_order, p] })}
-                          className="rounded-md border border-dashed border-line-strong px-2 py-0.5 font-mono text-[11.5px] text-muted transition-colors hover:border-accent/60 hover:text-accent-text"
-                        >
-                          + {p}
-                        </button>
-                      ))}
-                    </div>
-                  </SettingRow>
-                </>
-              )}
-              {s.ai_provider === "anthropic" && (
-                <>
-                  <SettingRow stacked title={t("settings.ai.key")} description={t("settings.ai.keyHintAnthropic")}>
-                    <KeyManager provider="anthropic" />
-                  </SettingRow>
-                  <SettingRow title={t("settings.ai.model")} description={t("settings.ai.anthropicModelHint")}>
-                    <CommitInput mono className="w-[300px]" value={s.anthropic_model} onCommit={(v) => void set({ anthropic_model: v })} />
-                  </SettingRow>
+                  {(hasOR || !hasAnthropic) && (
+                    <SettingRow title={t("settings.ai.modelOpenrouter")} description={t("settings.ai.modelHint")}>
+                      <CommitInput mono className="w-[300px]" value={s.ai_model} onCommit={(v) => void set({ ai_model: v })} />
+                    </SettingRow>
+                  )}
+                  {hasOR && (
+                    <SettingRow stacked title={t("settings.ai.order")} description={t("settings.ai.orderHint")}>
+                      <ChipInput
+                        mono
+                        values={s.ai_provider_order}
+                        onChange={(v) => void set({ ai_provider_order: v })}
+                        placeholder={t("settings.ai.orderPlaceholder")}
+                      />
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[12px] text-subtle">{t("settings.ai.orderSuggest")}</span>
+                        {PROVIDER_ORDER_SUGGESTIONS.filter((p) => !s.ai_provider_order.includes(p)).map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => void set({ ai_provider_order: [...s.ai_provider_order, p] })}
+                            className="rounded-md border border-dashed border-line-strong px-2 py-0.5 font-mono text-[11.5px] text-muted transition-colors hover:border-accent/60 hover:text-accent-text"
+                          >
+                            + {p}
+                          </button>
+                        ))}
+                      </div>
+                    </SettingRow>
+                  )}
+                  {(hasAnthropic || !hasOR) && (
+                    <SettingRow title={t("settings.ai.modelAnthropic")} description={t("settings.ai.anthropicModelHint")}>
+                      <CommitInput mono className="w-[300px]" value={s.anthropic_model} onCommit={(v) => void set({ anthropic_model: v })} />
+                    </SettingRow>
+                  )}
                 </>
               )}
               {s.ai_provider === "openai_compatible" && <OpenAISettings s={s} set={set} />}
@@ -921,12 +932,14 @@ function Ai({ s, set }: SectionProps) {
         <div className="grid grid-cols-2 gap-3">
           {(
             [
-              { v: "openrouter", icon: <Bot />, title: t("settings.ai.commandOpenrouter"), text: t("settings.ai.commandOpenrouterText") },
+              { v: "keys", icon: <Bot />, title: t("settings.ai.commandKeys"), text: t("settings.ai.commandKeysText") },
               { v: "claude_cli", icon: <Terminal />, title: t("settings.ai.commandCli"), text: t("settings.ai.commandCliText") },
               { v: "openai_compatible", icon: <Bot />, title: t("settings.ai.providers.openai_compatible"), text: t("settings.ai.commandOpenaiText") },
             ] as const
           ).map((o) => {
-            const active = s.command_provider === o.v;
+            const active =
+              s.command_provider === o.v ||
+              (o.v === "keys" && (s.command_provider === "openrouter" || s.command_provider === "anthropic"));
             return (
               <button
                 key={o.v}
@@ -965,6 +978,8 @@ function Ai({ s, set }: SectionProps) {
 
 function HistorySection({ s, set }: SectionProps) {
   const days = [0, 7, 30, 90, 180, 365];
+  const keeps = [0, 10, 30, 50, 100];
+  const limits = [100, 300, 500, 1000, 2000];
   return (
     <section>
       <SectionTitle>{t("settings.history.title")}</SectionTitle>
@@ -987,6 +1002,25 @@ function HistorySection({ s, set }: SectionProps) {
               value: d,
               label: d === 0 ? t("settings.history.forever") : tp("units.days", d),
             }))}
+          />
+        </SettingRow>
+        <SettingRow title={t("settings.history.recKeep")} description={t("settings.history.recKeepHint")}>
+          <Select
+            value={keeps.includes(s.recordings_keep) ? s.recordings_keep : 30}
+            onChange={(v) => void set({ recordings_keep: v })}
+            className="w-[200px]"
+            align="right"
+            options={keeps.map((n) => ({ value: n, label: n === 0 ? t("settings.history.recOff") : String(n) }))}
+          />
+        </SettingRow>
+        <SettingRow title={t("settings.history.recLimit")} description={t("settings.history.recLimitHint")}>
+          <Select
+            value={limits.includes(s.recordings_max_mb) ? s.recordings_max_mb : 300}
+            onChange={(v) => void set({ recordings_max_mb: v })}
+            className="w-[200px]"
+            align="right"
+            disabled={s.recordings_keep === 0}
+            options={limits.map((mb) => ({ value: mb, label: fmtMb(mb) }))}
           />
         </SettingRow>
         <SettingRow title={t("settings.history.clear")} description={t("settings.history.clearHint")}>

@@ -47,6 +47,7 @@ PERIOD_DAYS = {"day": 1, "week": 7, "month": 30}   # «за день» = пос�
 TYPING_WPM = 40          # база для «сэкономленного времени» (ТЗ)
 DAILY_DAYS = 30          # точек в графике на главной
 WEEK_DAYS = 7            # «за неделю» = последние 7 дней, включая сегодня
+MAX_SEARCH_WORDS = 50
 MAX_PAGE = 1000
 BUSY_TIMEOUT_S = 10.0    # ждать чужую блокировку записи (второй экземпляр, внешний просмотрщик)
 LEARN_JOURNAL_KEY = "learn_journal"   # kv: журнал выученных правок (для «Отменить»)
@@ -60,6 +61,16 @@ VOCAB_FETCH_ROWS = 2000     # строк vocab на процесс (самые �
 VOCAB_CACHE_APPS = 16       # сколько процессов держать в кэше частых слов
 VOCAB_REBUILD_CHUNK = 500   # записей истории за один заход пересборки (замок — только на чтение)
 _ALL_APPS = "\x00all"       # ключ кэша «все процессы»
+
+
+def _merge_ai_usage_columns(conn: sqlite3.Connection) -> None:
+    """Both repositories shipped schema 4 with different AI usage columns."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(ai_usage)")}
+    if "cost_estimated" not in columns:
+        conn.execute("ALTER TABLE ai_usage ADD COLUMN cost_estimated INTEGER NOT NULL DEFAULT 0")
+    if "key_id" not in columns:
+        conn.execute("ALTER TABLE ai_usage ADD COLUMN key_id TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS ai_usage_key ON ai_usage(key_id, ts)")
 
 
 _MIGRATIONS: tuple[tuple[Migration, ...], ...] = (
@@ -96,6 +107,9 @@ _MIGRATIONS: tuple[tuple[Migration, ...], ...] = (
     ),
     (  # 3 → 4: происхождение стоимости, сохраняется вместе с вызовом
         "ALTER TABLE ai_usage ADD COLUMN cost_estimated INTEGER NOT NULL DEFAULT 0",
+    ),
+    (  # 4 → 5: reconcile the fork and upstream variants of schema 4
+        _merge_ai_usage_columns,
     ),
 )
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -439,9 +453,14 @@ class Storage:
         Служебные записи (проверка распознавания, рассылка в RDP) находятся и по подписям,
         которые показывает интерфейс, на любом языке: «Рупор», «Rupor», «Recognition test»
         (в базе у них нейтральные app/title — engine.history_display)."""
-        tokens = textproc.fold(query or "").split()
+        tokens = list(dict.fromkeys(textproc.fold(query or "").split()))
         if not tokens:
             return "", []
+        # Слово, входящее в другое слово запроса, ничего не сужает (instr). Длинный запрос
+        # (вставили абзац) — первые MAX_SEARCH_WORDS слов: иначе SQLite отвечает
+        # «Expression tree is too large», а пользователь видит «внутреннюю ошибку».
+        tokens = [t for t in tokens if not any(t != o and t in o for o in tokens)]
+        tokens = tokens[:MAX_SEARCH_WORDS]
         # CAST AS BLOB: запись с битым UTF-8 не роняет поиск (py_fold декодирует с заменой)
         hay = ("py_fold(CAST(coalesce(text, '') || char(10) || coalesce(raw, '') || char(10) || "
                "coalesce(app, '') || char(10) || coalesce(title, '') || char(10) || "
@@ -1023,9 +1042,10 @@ class Storage:
             "ok": ok,
             "error_kind": None if ok else (_str(rec.get("error_kind")) or "error"),
             "app": _str(rec.get("app")),
+            "key_id": _str(rec.get("key_id")) or None,
         }
         cols = ("ts", "kind", "provider", "model", "upstream", "tokens_in", "tokens_out",
-                "cost_usd", "ms", "ok", "error_kind", "app", "cost_estimated")
+                "cost_usd", "ms", "ok", "error_kind", "app", "key_id", "cost_estimated")
         row["cost_estimated"] = bool(ok and cost is not None and rec.get("cost_estimated", False))
         with self._tx() as c:
             cur = c.execute(f"INSERT INTO ai_usage({', '.join(cols)}) "
@@ -1033,6 +1053,14 @@ class Storage:
                             [int(row[k]) if k == "ok" else row[k] for k in cols])
             row_id = int(cur.lastrowid or 0)
         return {"id": row_id, **row}
+
+    def ai_key_spend(self, key_id: str, since: float = 0.0) -> dict[str, Any]:
+        """Расход через ключ из списка ключей ИИ с момента ``since`` (unix, с):
+        {cost_usd, calls} — calls только удачные."""
+        with self._lock:
+            r = self._conn.execute("SELECT total(cost_usd), total(ok) FROM ai_usage "
+                                   "WHERE key_id = ? AND ts >= ?", (key_id, since)).fetchone()
+        return {"cost_usd": round(float(r[0] or 0.0), 6), "calls": int(r[1] or 0)}
 
     def ai_usage_today_cost(self, now: float | None = None) -> float:
         """Сколько стоили вызовы ИИ сегодня (локальная дата)."""

@@ -49,7 +49,7 @@ def test_invalid_json_patch_is_atomic(extra: str) -> None:
     s = config.Settings()
     with pytest.raises(ValueError):
         config.apply_patch(s, {"ai_provider": "openai_compatible", "openai_extra_json": extra})
-    assert s.ai_provider == "openrouter"
+    assert s.ai_provider == config.Settings().ai_provider
 
 
 @pytest.mark.parametrize("url", ["ftp://host", "http://", "https://user:pass@host", "https://host/v1?key=x"])

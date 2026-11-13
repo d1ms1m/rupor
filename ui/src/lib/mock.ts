@@ -10,6 +10,9 @@ import { fmtDecimal, titleRuleKey } from "./format";
 import { BackendError, EventHub, type ArgsTuple, type Backend } from "./hub";
 import type {
   AiBalance,
+  AiKeyEntry,
+  AiKeyInfo,
+  AiKeyItem,
   AiUsageKind,
   AiUsageStats,
   AiUsageTotals,
@@ -37,6 +40,7 @@ import type {
   ModelRecommend,
   NoticeEvent,
   RdpWindow,
+  RecordingItem,
   Settings,
   SettingsPatch,
   Snippet,
@@ -166,6 +170,31 @@ function fmtGb(mb: number): string {
   return fmtDecimal(mb / 1024, 1);
 }
 
+/** Демо-звук записи: тихий тон, WAV 16 кГц моно 16 бит в base64. */
+function demoWav(seconds: number): string {
+  const rate = 16000;
+  const n = Math.max(1, Math.round(rate * seconds));
+  const buf = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o: number, s: string) => [...s].forEach((ch, i) => buf.setUint8(o + i, ch.charCodeAt(0)));
+  str(0, "RIFF");
+  buf.setUint32(4, 36 + n * 2, true);
+  str(8, "WAVEfmt ");
+  buf.setUint32(16, 16, true);
+  buf.setUint16(20, 1, true);
+  buf.setUint16(22, 1, true);
+  buf.setUint32(24, rate, true);
+  buf.setUint32(28, rate * 2, true);
+  buf.setUint16(32, 2, true);
+  buf.setUint16(34, 16, true);
+  str(36, "data");
+  buf.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) buf.setInt16(44 + i * 2, Math.round(1500 * Math.sin((2 * Math.PI * 220 * i) / rate)), true);
+  let bin = "";
+  const bytes = new Uint8Array(buf.buffer);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -230,6 +259,7 @@ const DEFAULT_SETTINGS: Settings = {
   double_tap_ms: 400,
   insert_last_hotkey: "ctrl+alt+shift+v",
   copy_last_hotkey: "ctrl+alt+shift+c",
+  convert_layout_hotkey: "shift+pause",
   mouse_button: "",
   input_device: null,
   min_record_ms: 300,
@@ -267,6 +297,8 @@ const DEFAULT_SETTINGS: Settings = {
   default_style: "normal",
   history_enabled: true,
   history_retention_days: 0,
+  recordings_keep: 30,
+  recordings_max_mb: 300,
   pill_enabled: true,
   pill_position: null,
   theme: "system",
@@ -275,7 +307,11 @@ const DEFAULT_SETTINGS: Settings = {
   dictation_language: "auto",
   first_run_done: true,
   ai_enabled: true,
-  ai_provider: "openrouter",
+  ai_provider: "keys",
+  ai_keys: [
+    { id: "anthropic", provider: "anthropic", label: "", enabled: true, balance_usd: 80, balance_at: Math.floor(Date.now() / 1000) - 3 * 86400 },
+    { id: "openrouter", provider: "openrouter", label: "", enabled: true, balance_usd: null, balance_at: null },
+  ],
   ai_model: "anthropic/claude-haiku-4.5",
   anthropic_model: "claude-haiku-4-5",
   openai_base_url: "",
@@ -290,7 +326,7 @@ const DEFAULT_SETTINGS: Settings = {
   ai_mode: "wait",
   ai_min_words: 6,
   ai_timeout_s: 5,
-  command_provider: "openrouter",
+  command_provider: "keys",
   env_path: "",
 };
 
@@ -317,6 +353,8 @@ export class MockBackend implements Backend {
   private settings: Settings;
   private state: CoreState;
   private history: HistoryItem[] = [];
+  /** Демо «История → Записи»: записи голоса строятся из первых диктовок истории. */
+  private recordings: RecordingItem[] | null = null;
   private daily = new Map<string, DayStat>();
   private baseWords = 48_214;
   private baseSpeech = 48_214 / WORDS_PER_SEC;
@@ -327,11 +365,14 @@ export class MockBackend implements Backend {
   private data: MockData;
   private sysLang: Locale;
   private draft: string;
-  private keys: Record<KeyProvider, string | null> = {
+  /** Секреты ключей по id записи списка (маска); id = провайдер — прежняя цель Rupor/<провайдер>. */
+  private secrets: Record<string, string | null> = {
     openrouter: "sk-or-v1-…XYZ",
-    anthropic: null,
+    anthropic: "sk-ant-api03-…k9Q",
     openai_compatible: null,
   };
+  /** Расход демо-ключей: всего и с момента ввода остатка (Anthropic «уже потратил» $3.10). */
+  private keySpent: Record<string, number> = { anthropic: 3.1 };
   private rdpOpen: RdpBase[];
   private usage: UsageRow[] = [];
   private balanceCache: { at: number; value: AiBalance } | null = null;
@@ -363,7 +404,8 @@ export class MockBackend implements Backend {
       this.settings.first_run_done = false;
       this.settings.ai_enabled = false;
       this.cudaReady = false;
-      this.keys.openrouter = null;
+      this.secrets = {};
+      this.settings.ai_keys = [];
     }
     if (opts.noGpu && !opts.firstRun) {
       this.settings.device = "cpu";
@@ -417,7 +459,7 @@ export class MockBackend implements Backend {
         setTimeout(
           () =>
             this.hub.emit("notice", {
-              text: fill(this.tx.balanceLow, { balance: "0.62" }),
+              text: fill(this.tx.balanceLow, { name: "OpenRouter", balance: "0.62" }),
               level: "warn",
               action: null,
               toast: true,
@@ -490,6 +532,29 @@ export class MockBackend implements Backend {
     return pref === "ru" || pref === "en" ? pref : this.sysLang;
   }
 
+  /** Демо-записи голоса: по одной на первые диктовки истории, последняя — «речь не распознана». */
+  private recordingsDemo(): RecordingItem[] {
+    if (this.recordings === null) {
+      const src = this.history.slice(0, 7);
+      this.recordings = src.map((h, i) => {
+        const empty = i === 2;
+        const d = empty ? 153.2 : h.duration_s;
+        const ts = h.ts;
+        const dt = new Date(ts * 1000);
+        const p2 = (n: number) => String(n).padStart(2, "0");
+        const id =
+          `${dt.getFullYear()}${p2(dt.getMonth() + 1)}${p2(dt.getDate())}-` +
+          `${p2(dt.getHours())}${p2(dt.getMinutes())}${p2(dt.getSeconds())}-${String(i).padStart(3, "0")}`;
+        return {
+          id, ts, duration_s: d, bytes: Math.round(d * 32000) + 44, app: h.app,
+          status: empty ? "empty" : "ok", chars: empty ? 0 : h.text.length,
+          history_id: empty ? null : h.id,
+        };
+      });
+    }
+    return this.recordings;
+  }
+
   /** Тексты «ядра» на текущем языке интерфейса. */
   private get tx(): MockData["texts"] {
     return DATA[this.state.ui_language].texts;
@@ -507,6 +572,7 @@ export class MockBackend implements Backend {
       cancel: this.settings.cancel_key,
       insert_last: this.settings.insert_last_hotkey,
       copy_last: this.settings.copy_last_hotkey,
+      convert_layout: this.settings.convert_layout_hotkey,
     };
   }
 
@@ -784,7 +850,11 @@ export class MockBackend implements Backend {
       row.estimated = row.cost !== null;
     }
     this.usage.push(row);
-    if (this.settings.ai_provider === "openrouter") this.balanceSpent += row.cost ?? 0;
+    this.balanceSpent += row.cost ?? 0;
+    const first = this.chain()[0];
+    if (first && ["keys", "openrouter", "anthropic"].includes(this.settings.ai_provider)) {
+      this.keySpent[first.id] = (this.keySpent[first.id] ?? 0) + (row.cost ?? 0);
+    }
     const today = this.aiStats().today.cost_usd;
     this.hub.emit("ai_usage", {
       kind,
@@ -849,20 +919,114 @@ export class MockBackend implements Backend {
     };
   }
 
+  /** Очередь ключей, как keys.chain в ядре (без пауз после ошибок). */
+  private chain(provider: string = this.settings.ai_provider): AiKeyEntry[] {
+    if (provider !== "keys" && provider !== "openrouter" && provider !== "anthropic") return [];
+    return this.settings.ai_keys.filter((e) => e.enabled && (provider === "keys" || e.provider === provider));
+  }
+
+  private keyTitle(e: AiKeyEntry): string {
+    if (e.label) return e.label;
+    const name = e.provider === "openrouter" ? "OpenRouter" : "Anthropic";
+    const same = this.settings.ai_keys.filter((x) => x.provider === e.provider);
+    return same.length <= 1 ? name : `${name} #${same.findIndex((x) => x.id === e.id) + 1}`;
+  }
+
+  private keyItem(e: AiKeyEntry): AiKeyItem {
+    const secret = this.secrets[e.id] ?? null;
+    const spent = Math.round((this.keySpent[e.id] ?? 0) * 10_000) / 10_000;
+    return {
+      ...structuredClone(e),
+      title: this.keyTitle(e),
+      has_key: Boolean(secret),
+      masked: secret,
+      spent_usd: spent,
+      calls: Math.round(spent * 900),
+      spent_since_usd: e.balance_at !== null ? spent : null,
+      paused_until: null,
+      paused_reason: null,
+    };
+  }
+
+  private keyInfo(id: string, cmd: string): AiKeyInfo {
+    const e = this.settings.ai_keys.find((x) => x.id === id);
+    if (!e) throw new BackendError(this.tx.keyUnknown, cmd);
+    const item = this.keyItem(e);
+    const base = {
+      id,
+      provider: e.provider,
+      spent_usd: item.spent_usd,
+      calls: item.calls,
+      spent_since_usd: item.spent_since_usd,
+      checked_at: Math.floor(Date.now() / 1000),
+    };
+    if (!item.has_key) {
+      return { ...base, valid: false, balance_usd: null, balance_source: null, usage_usd: null, limit_usd: null, checked_at: null, error: this.tx.noKey };
+    }
+    if (e.provider === "openrouter") {
+      return {
+        ...base,
+        valid: true,
+        balance_usd: Math.round(((this.opts.lowBalance ? 0.62 : BALANCE_START) - this.balanceSpent) * 10_000) / 10_000,
+        balance_source: "api",
+        usage_usd: Math.round((BALANCE_USED + this.balanceSpent) * 10_000) / 10_000,
+        limit_usd: null,
+        error: null,
+      };
+    }
+    if (e.balance_usd !== null) {
+      return {
+        ...base,
+        valid: true,
+        balance_usd: Math.max(0, Math.round((e.balance_usd - item.spent_usd) * 10_000) / 10_000),
+        balance_source: "estimate",
+        usage_usd: null,
+        limit_usd: null,
+        error: null,
+      };
+    }
+    return {
+      ...base,
+      valid: true,
+      balance_usd: null,
+      balance_source: null,
+      usage_usd: null,
+      limit_usd: null,
+      error: fill(this.tx.balanceNoApi, { name: "Anthropic" }),
+    };
+  }
+
   private aiBalance(force: boolean): AiBalance {
     const hit = this.balanceCache;
     if (!force && hit && Date.now() - hit.at < BALANCE_CACHE_MS) return structuredClone(hit.value);
-    const value: AiBalance = this.keys.openrouter
-      ? {
-          balance_usd: Math.round(((this.opts.lowBalance ? 0.62 : BALANCE_START) - this.balanceSpent) * 10_000) / 10_000,
-          usage_usd: Math.round((BALANCE_USED + this.balanceSpent) * 10_000) / 10_000,
-          limit_usd: null,
-          checked_at: Math.floor(Date.now() / 1000),
-          error: null,
-        }
-      : { balance_usd: null, usage_usd: null, limit_usd: null, checked_at: null, error: this.tx.noKey };
+    const first = (this.settings.ai_enabled ? this.chain() : [])[0] ?? this.chain(this.settings.command_provider)[0];
+    let value: AiBalance;
+    if (!first) {
+      value = { balance_usd: null, usage_usd: null, limit_usd: null, checked_at: null, error: this.tx.noKeys, key_id: null, provider: null, label: null, estimate: false };
+    } else {
+      const info = this.keyInfo(first.id, "ai_balance");
+      value = {
+        balance_usd: info.balance_usd,
+        usage_usd: info.usage_usd,
+        limit_usd: info.limit_usd,
+        checked_at: info.checked_at,
+        error: info.balance_usd !== null ? null : info.error,
+        key_id: first.id,
+        provider: first.provider,
+        label: this.keyTitle(first),
+        estimate: info.balance_source === "estimate",
+      };
+    }
     this.balanceCache = { at: Date.now(), value };
     return structuredClone(value);
+  }
+
+  private ensureLegacyKey(provider: KeyProvider): void {
+    if (provider === "openai_compatible") return;
+    if (this.settings.ai_keys.some((e) => e.id === provider)) return;
+    this.applySettings({
+      ai_keys: [...this.settings.ai_keys, { id: provider, provider, label: "", enabled: true, balance_usd: null, balance_at: null }],
+    });
   }
 
   // ——— Правила по названию окна ———
@@ -1575,7 +1739,7 @@ export class MockBackend implements Backend {
       }
       case "ai_key_status": {
         const a = rawArgs as CommandArgs<"ai_key_status">;
-        const k = this.keys[a.provider];
+        const k = this.secrets[a.provider];
         return { has_key: Boolean(k), masked: k ? mask(k) : null };
       }
       case "ai_key_import_env": {
@@ -1586,24 +1750,31 @@ export class MockBackend implements Backend {
           if (!path.toLowerCase().endsWith(".env")) {
             throw new BackendError(this.tx.envNotFound, cmd);
           }
-          this.keys.openrouter = "sk-or-v1-…XYZ";
-          return { imported: true, masked: this.keys.openrouter };
+          this.secrets.openrouter = "sk-or-v1-…XYZ";
+          this.ensureLegacyKey("openrouter");
+          this.balanceCache = null;
+          return { imported: true, masked: this.secrets.openrouter };
         });
       }
       case "ai_key_set": {
         const a = rawArgs as CommandArgs<"ai_key_set">;
         if (a.key.trim().length < 12) throw new BackendError(this.tx.badKey, cmd);
-        this.keys[a.provider] = mask(a.key.trim());
-        return { masked: this.keys[a.provider] };
+        const masked = mask(a.key.trim());
+        this.secrets[a.provider] = masked;
+        this.ensureLegacyKey(a.provider);
+        this.balanceCache = null;
+        return { masked };
       }
       case "ai_key_delete": {
         const a = rawArgs as CommandArgs<"ai_key_delete">;
-        this.keys[a.provider] = null;
+        this.secrets[a.provider] = null;
+        this.applySettings({ ai_keys: this.settings.ai_keys.filter((e) => e.id !== a.provider) });
+        this.balanceCache = null;
         return null;
       }
       case "ai_key_check":
         return sleep(700).then(() =>
-          this.keys.openrouter
+          this.secrets[this.settings.ai_keys.find((e) => e.provider === "openrouter")?.id ?? "openrouter"]
             ? {
                 valid: true,
                 label: this.tx.keyLabel,
@@ -1641,6 +1812,46 @@ export class MockBackend implements Backend {
           };
         });
       }
+      case "recordings_list": {
+        const items = this.recordingsDemo();
+        return sleep(160).then(() => ({
+          items: structuredClone(items),
+          total_bytes: items.reduce((n, r) => n + r.bytes, 0),
+          keep: this.settings.recordings_keep,
+          max_bytes: this.settings.recordings_max_mb * 1024 * 1024,
+        }));
+      }
+      case "recording_audio": {
+        const a = rawArgs as CommandArgs<"recording_audio">;
+        const rec = this.recordingsDemo().find((r) => r.id === a.id);
+        if (!rec) throw new BackendError(this.tx.recordingNotFound, cmd);
+        return sleep(60).then(() => ({ mime: "audio/wav", data: demoWav(Math.min(rec.duration_s, 3)) }));
+      }
+      case "recording_transcribe": {
+        const a = rawArgs as CommandArgs<"recording_transcribe">;
+        const rec = this.recordingsDemo().find((r) => r.id === a.id);
+        if (!rec) throw new BackendError(this.tx.recordingNotFound, cmd);
+        const h = this.history.find((x) => x.id === rec.history_id) ?? this.history[0];
+        const text = h?.text ?? "";
+        rec.status = text ? "ok" : "empty";
+        rec.chars = text.length;
+        return sleep(900).then(() => ({
+          id: rec.id, text, raw: h?.raw ?? "", language: h?.language ?? "ru",
+          duration_s: rec.duration_s, ai: Boolean(h?.ai),
+        }));
+      }
+      case "recording_delete": {
+        const a = rawArgs as CommandArgs<"recording_delete">;
+        this.recordings = this.recordingsDemo().filter((r) => r.id !== a.id);
+        return null;
+      }
+      case "recordings_clear": {
+        const n = this.recordingsDemo().length;
+        this.recordings = [];
+        return { deleted: n };
+      }
+      case "recording_reveal":
+        return null;
       case "open_logs":
         return null;
       case "title_rules_list":
@@ -1679,6 +1890,73 @@ export class MockBackend implements Backend {
       case "ai_balance": {
         const a = (rawArgs ?? {}) as CommandArgs<"ai_balance">;
         return sleep(a.force ? 650 : 60).then(() => this.aiBalance(Boolean(a.force)));
+      }
+      case "ai_keys_list":
+        return this.settings.ai_keys.map((e) => this.keyItem(e));
+      case "ai_key_add": {
+        const a = rawArgs as CommandArgs<"ai_key_add">;
+        if (a.key.trim().length < 12) throw new BackendError(this.tx.badKey, cmd);
+        const ids = new Set(this.settings.ai_keys.map((e) => e.id));
+        let id: string = a.provider;
+        while (ids.has(id)) id = `${a.provider}-${Math.random().toString(16).slice(2, 8)}`;
+        const hasBal = a.balance_usd !== undefined && a.balance_usd !== null;
+        const entry: AiKeyEntry = {
+          id,
+          provider: a.provider,
+          label: (a.label ?? "").trim(),
+          enabled: true,
+          balance_usd: hasBal ? (a.balance_usd ?? null) : null,
+          balance_at: hasBal ? Math.floor(Date.now() / 1000) : null,
+        };
+        this.secrets[id] = mask(a.key.trim());
+        this.applySettings({ ai_keys: [...this.settings.ai_keys, entry] });
+        this.balanceCache = null;
+        return sleep(150).then(() => this.keyItem(entry));
+      }
+      case "ai_key_update": {
+        const a = rawArgs as CommandArgs<"ai_key_update">;
+        const e = this.settings.ai_keys.find((x) => x.id === a.id);
+        if (!e) throw new BackendError(this.tx.keyUnknown, cmd);
+        const next: AiKeyEntry = { ...e };
+        if (a.label !== undefined) next.label = a.label.trim();
+        if (a.enabled !== undefined) next.enabled = a.enabled;
+        if (a.balance_usd !== undefined) {
+          next.balance_usd = a.balance_usd;
+          next.balance_at = a.balance_usd !== null ? Math.floor(Date.now() / 1000) : null;
+          this.keySpent[e.id] = 0;
+        }
+        this.applySettings({ ai_keys: this.settings.ai_keys.map((x) => (x.id === a.id ? next : x)) });
+        this.balanceCache = null;
+        return this.keyItem(next);
+      }
+      case "ai_key_replace": {
+        const a = rawArgs as CommandArgs<"ai_key_replace">;
+        const e = this.settings.ai_keys.find((x) => x.id === a.id);
+        if (!e) throw new BackendError(this.tx.keyUnknown, cmd);
+        if (a.key.trim().length < 12) throw new BackendError(this.tx.badKey, cmd);
+        this.secrets[e.id] = mask(a.key.trim());
+        this.balanceCache = null;
+        return this.keyItem(e);
+      }
+      case "ai_key_remove": {
+        const a = rawArgs as CommandArgs<"ai_key_remove">;
+        if (!this.settings.ai_keys.some((x) => x.id === a.id)) throw new BackendError(this.tx.keyUnknown, cmd);
+        this.secrets[a.id] = null;
+        this.applySettings({ ai_keys: this.settings.ai_keys.filter((x) => x.id !== a.id) });
+        this.balanceCache = null;
+        return null;
+      }
+      case "ai_keys_reorder": {
+        const a = rawArgs as CommandArgs<"ai_keys_reorder">;
+        const byId = new Map(this.settings.ai_keys.map((e) => [e.id, e]));
+        if (a.ids.length !== byId.size || a.ids.some((id) => !byId.has(id))) throw new BackendError(this.tx.keyUnknown, cmd);
+        this.applySettings({ ai_keys: a.ids.map((id) => byId.get(id) as AiKeyEntry) });
+        this.balanceCache = null;
+        return this.settings.ai_keys.map((e) => this.keyItem(e));
+      }
+      case "ai_key_info": {
+        const a = rawArgs as CommandArgs<"ai_key_info">;
+        return sleep(a.force ? 600 : 120).then(() => this.keyInfo(a.id, cmd));
       }
     }
   }

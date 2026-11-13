@@ -121,7 +121,8 @@ def mc() -> GestureMachine:
     return GestureMachine(RCTRL, RSHIFT, ESC, tap_max_ms=250, double_tap_ms=400,
                           command_mod=RALT,
                           insert_last=parse_chord("ctrl+alt+shift+v"),
-                          copy_last=parse_chord("ctrl+alt+shift+c"))
+                          copy_last=parse_chord("ctrl+alt+shift+c"),
+                          convert_layout=parse_chord("shift+pause"))
 
 
 def test_command_modifier_during_hold_is_swallowed(mc: GestureMachine) -> None:
@@ -203,6 +204,12 @@ def test_insert_last_chord(mc: GestureMachine) -> None:
     for vk, t in ((LSHIFT, 6), (LALT, 7), (LCTRL, 8)):
         mc.key_up(vk, t)
         assert mc.swallow is False
+
+
+def test_convert_layout_chord(mc: GestureMachine) -> None:
+    assert kinds(mc.key_down(LSHIFT, 1000)) == []
+    assert kinds(mc.key_down(0x13, 1010)) == [Kind.CONVERT_LAYOUT]   # Pause
+    assert mc.swallow is True   # Pause в окно не уходит
 
 
 def test_copy_last_chord_with_ptt_ctrl_discards_recording(mc: GestureMachine) -> None:
@@ -609,6 +616,26 @@ def test_mouse_escape_in_stop_pending(ca: GestureMachine) -> None:
     assert kinds(ca.mouse_up(3100)) == []
 
 
+def test_mouse_escape_during_hold_keeps_mouse_working(ca: GestureMachine) -> None:
+    # Esc посреди записи кнопкой мыши: ptt не нажимали — ждать его отпускания нечего
+    ca.mouse_down(1000)
+    assert kinds(ca.key_down(ESC, 2000)) == [Kind.CANCEL]
+    assert kinds(ca.mouse_up(2500)) == []
+    assert kinds(ca.mouse_down(5000)) == [Kind.START]
+    assert kinds(ca.mouse_up(7000)) == [Kind.STOP]
+
+
+def test_combo_during_mouse_hold_keeps_mouse_working(ca: GestureMachine) -> None:
+    ca.mouse_down(1000)
+    assert kinds(ca.key_down(C, 2000)) == [Kind.DISCARD]
+    ca.key_up(C, 2050)
+    assert kinds(ca.mouse_up(2500)) == []
+    assert kinds(ca.mouse_down(5000)) == [Kind.START]
+    assert kinds(ca.mouse_up(7000)) == [Kind.STOP]
+    assert kinds(ca.key_down(LCTRL, 8000)) == []               # и клавиатура тоже
+    assert kinds(ca.key_down(LALT, 8010)) == [Kind.START]
+
+
 def test_pill_click_toggles(ca: GestureMachine) -> None:
     assert kinds(ca.external_toggle(1000)) == [Kind.START, Kind.HANDS_FREE]
     assert kinds(ca.key_down(ord("A"), 2000)) == []
@@ -714,3 +741,62 @@ def test_hook_ignores_mstsc_sync_copies(cw: GestureMachine,
     event(LCTRL, MSTSC_SYNC_EXTRA)
     event(LWIN, MSTSC_SYNC_EXTRA)
     assert acts == [] and cw.presses == before
+
+
+# ---------- хук клавиатуры не снимается молча ----------
+
+def test_hook_start_reports_install_failure(m: GestureMachine,
+                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    """Хук не поставился (три попытки): start() поднимает ошибку — ядро покажет её, а не
+    будет делать вид, что хоткеи работают."""
+    from rupor import _win as w
+    from rupor import hotkeys
+    from rupor.hotkeys import KeyboardHook
+
+    monkeypatch.setattr(hotkeys.time, "sleep", lambda s: None)
+    monkeypatch.setattr(w.kernel32, "GetCurrentThreadId", lambda: 1)
+    calls = []
+
+    def install(self: KeyboardHook) -> None:
+        calls.append(1)
+        raise OSError("SetWindowsHookEx: ошибка 5")
+
+    monkeypatch.setattr(KeyboardHook, "_install", install)
+    hook = KeyboardHook(m, lambda a: None)
+    with pytest.raises(OSError, match="SetWindowsHookEx"):
+        hook.start()
+    assert len(calls) == 3
+
+
+def test_failed_rehook_keeps_hook_thread_alive(m: GestureMachine,
+                                               monkeypatch: pytest.MonkeyPatch) -> None:
+    """Перевесить хук (RDP впереди) не вышло — цикл сообщений продолжает работать на прежнем
+    хуке, а не завершает поток вместе со всеми хоткеями."""
+    from rupor import _win as w
+    from rupor.hotkeys import WM_APP_REHOOK, KeyboardHook
+
+    installs: list[int] = []
+
+    def install(self: KeyboardHook) -> None:
+        installs.append(1)
+        if len(installs) > 1:
+            raise OSError("SetWindowsHookEx: ошибка 1428")
+        self._hook = None
+
+    msgs = [WM_APP_REHOOK, WM_APP_REHOOK, None]
+
+    def get_message(ref: object, *_a: object) -> int:
+        msg = msgs.pop(0)
+        if msg is None:
+            return 0
+        ref._obj.message = msg  # type: ignore[attr-defined]
+        return 1
+
+    monkeypatch.setattr(KeyboardHook, "_install", install)
+    monkeypatch.setattr(w.kernel32, "GetCurrentThreadId", lambda: 1)
+    monkeypatch.setattr(w.user32, "GetMessageW", get_message)
+    monkeypatch.setattr(w.user32, "SetWinEventHook", lambda *a: 0)
+    monkeypatch.setattr(w.user32, "UnhookWinEvent", lambda *a: 1)
+    hook = KeyboardHook(m, lambda a: None)
+    hook._run()                                  # не бросает
+    assert len(installs) == 3 and msgs == [] and hook.error is None

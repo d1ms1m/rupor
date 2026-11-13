@@ -54,8 +54,8 @@ from typing import Any, Callable, Protocol
 
 import numpy as np
 
-from . import (ai, audio, broadcast, config, credman, duck, fetch, fuzzy, i18n, inject,
-               learn, recommend, sounds, spell, textproc, uia, vocab, winutil)
+from . import (ai, audio, broadcast, config, credman, duck, fetch, fuzzy, i18n, inject, keys,
+               layout, learn, recommend, sounds, spell, textproc, uia, vocab, winutil)
 from . import _win
 from ._win import VK_RIGHT
 from .asr import (SAMPLE_RATE, ModelMissing, Recognizer, Result, cuda_compute_types,
@@ -64,6 +64,7 @@ from .config import MODE_AUTO, MODE_CLIPBOARD, MODE_TYPE, Settings
 from .hotkeys import (Action, Chord, GestureMachine, KeyboardHook, KeyGroup, Kind, key_group,
                       parse_chord, parse_ptt)
 from .i18n import tr
+from .recordings import Limits, Recordings
 from .storage import Storage
 
 log = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ RECENT_APPS = 20
 MAX_RECORD_S = 600          # запись дольше 10 минут останавливается (потерянное отпускание,
                             # забытый режим «без рук»)
 TEST_RECORD_MAX_S = 60      # проверочная запись мастера — не дольше минуты
+NO_SPEECH_HINT_S = 5.0      # запись длиннее, а текста нет — «запись сохранена, распознайте заново»
 MIC_DEAD_HOLD_S = 1.0       # удержание дольше этого, а звука почти нет — микрофон отвалился
 MIC_DEAD_RATIO = 0.3        # …если записано меньше этой доли от длительности удержания
 LEARN_WATCH_S = 60.0        # обучение словаря: столько следим за полем после вставки
@@ -472,6 +474,7 @@ class _Job:
     audio: np.ndarray
     t_release: float                     # perf_counter в момент отпускания
     target: winutil.WindowInfo | None    # активное окно в момент отпускания
+    rec_id: str | None = None            # сохранённая запись голоса (recordings), None — нет
 
 
 @dataclass
@@ -497,7 +500,8 @@ class Engine:
                  recorder_factory: RecorderFactory | None = None,
                  field_reader: FieldReader | None = None,
                  context_reader: ContextReader | None = None,
-                 ducker: DuckerLike | None = None) -> None:
+                 ducker: DuckerLike | None = None,
+                 recordings: Recordings | None = None) -> None:
         self.s = settings
         # Язык сообщений ядра — из настроек (system → язык Windows); меняется на лету
         i18n.set_language(getattr(settings, "language", i18n.SYSTEM))
@@ -508,6 +512,11 @@ class Engine:
         if self.storage.recovered is not None:
             log.warning("База была повреждена и пересоздана: %s", self.storage.recovered)
         self.own_pids = {os.getpid(), *(p for p in own_pids if p)}
+        # Последние записи голоса — рядом с базой (тесты с временной базой не пишут
+        # в настоящий %APPDATA%)
+        db_path = getattr(self.storage, "path", None)
+        self.recordings = recordings if recordings is not None else Recordings(
+            (Path(db_path).parent if db_path else config.app_dir()) / "recordings")
         self.auto_download_model = auto_download_model
         self.rec: RecognizerLike = recognizer or Recognizer(settings, on_notice=self._rec_notice)
         self.rec.prompt_provider = self._asr_prompt
@@ -563,6 +572,8 @@ class Engine:
         self._balance_at = 0.0          # monotonic — когда получен кэш
         self._balance_lock = threading.Lock()
         self._balance_fetching = threading.Lock()
+        # Проверка ключей из списка (ai_key_info): id → (monotonic, ответ провайдера)
+        self._key_checks: dict[str, tuple[float, dict[str, Any]]] = {}
         # Звук компьютера во время записи: сессии процессов Рупора (ядро играет звуки начала
         # и конца, own_pids) не трогаются; _ducked — приглушение запрошено (под self._lock)
         self.ducker: DuckerLike = (ducker if ducker is not None
@@ -572,12 +583,13 @@ class Engine:
     # ---------- жизненный цикл ----------
 
     def _machine_args(self) -> tuple[tuple[KeyGroup, ...], KeyGroup, KeyGroup, int, int,
-                                     KeyGroup, Chord | None, Chord | None]:
+                                     KeyGroup, Chord | None, Chord | None, Chord | None]:
         s = self.s
         il = parse_chord(s.insert_last_hotkey) if s.insert_last_hotkey else None
         cl = parse_chord(s.copy_last_hotkey) if s.copy_last_hotkey else None
+        lc = parse_chord(s.convert_layout_hotkey) if s.convert_layout_hotkey else None
         return (parse_ptt(s.ptt_key), key_group(s.broadcast_modifier), key_group(s.cancel_key),
-                s.tap_max_ms, s.double_tap_ms, key_group(s.command_modifier), il, cl)
+                s.tap_max_ms, s.double_tap_ms, key_group(s.command_modifier), il, cl, lc)
 
     def start(self, hook: bool = True, track_focus: bool = True) -> None:
         if self._started:
@@ -587,6 +599,11 @@ class Engine:
             sounds.prepare()
         except Exception:
             log.exception("Не удалось подготовить звуки")
+        try:
+            # переход на список ключей добавил записи прежних ключей — без секрета убрать
+            self.modify_settings(self._drop_missing_legacy_keys)
+        except Exception:
+            log.exception("Список ключей ИИ: не удалось убрать записи без ключа")
         threading.Thread(target=self._ctl_loop, name="rupor-ctl", daemon=True).start()
         threading.Thread(target=self._job_loop, name="rupor-asr", daemon=True).start()
         threading.Thread(target=self._idle_loop, name="rupor-idle", daemon=True).start()
@@ -613,7 +630,10 @@ class Engine:
             # печать ждёт, пока пользователь держит клавишу диктовки (следующая фраза)
             inject.set_hold_probe(self.machine.is_held)
             self.hook.mouse_button = self.s.mouse_button
-            self.hook.start()
+            try:
+                self.hook.start()
+            except OSError as e:
+                self.notice(tr("eng.hook_failed", error=e), level="error")
         if self.storage.recovered is not None:
             self.notice(tr("eng.db_recovered"), level="warn")
 
@@ -718,7 +738,8 @@ class Engine:
             "ui_language": i18n.current(),
             "hotkeys": {"ptt": s.ptt_key, "broadcast": s.broadcast_modifier,
                         "command": s.command_modifier, "cancel": s.cancel_key,
-                        "insert_last": s.insert_last_hotkey, "copy_last": s.copy_last_hotkey},
+                        "insert_last": s.insert_last_hotkey, "copy_last": s.copy_last_hotkey,
+                        "convert_layout": s.convert_layout_hotkey},
         }
 
     def notice(self, text: str, level: str = "info", action: str | None = None,
@@ -866,6 +887,10 @@ class Engine:
             except (ValueError, OSError) as e:
                 self.notice(str(e), level="warn")
             return
+        if k is Kind.CONVERT_LAYOUT:
+            # копирование выделения ждёт буфер до 0,4 с — не в потоке управления
+            self._jobs.put(("layout", None))
+            return
         if k is Kind.START:
             # Новая диктовка: наблюдение за прошлой вставкой заканчивается (с оценкой правок)
             self._learn_stop("новая диктовка")
@@ -959,10 +984,15 @@ class Engine:
             target = winutil.foreground()
             if target is not None and self._is_foreign(target):
                 self._remember_window(target)
+            # Запись — на диск до распознавания: сорвётся распознавание или вставка —
+            # голос не потерян, его можно распознать заново (История → Записи)
+            rec_id = self.recordings.save(audio_data, self._rec_limits(),
+                                          ts=sess.started_wall,
+                                          app=target.process if target is not None else "")
             with self._lock:
                 self._busy += 1
             self._refresh_state()
-            self._jobs.put(("transcribe", _Job(sess, audio_data, t_release, target)))
+            self._jobs.put(("transcribe", _Job(sess, audio_data, t_release, target, rec_id)))
 
     def _end_session(self) -> None:
         """Запись кончилась (стоп, отмена, выброс, лимит, пауза, смена микрофона): таймеры
@@ -1105,6 +1135,8 @@ class Engine:
                     self._insert_to(*payload)
                 elif kind == "replace":
                     self._do_replace(*payload)
+                elif kind == "layout":
+                    self.convert_layout()
             except ModelMissing as e:
                 if self.s.sounds:
                     sounds.play("error")
@@ -1723,17 +1755,22 @@ class Engine:
 
     # ---------- ИИ ----------
 
+    @staticmethod
+    def _drop_missing_legacy_keys(s: Settings) -> dict[str, Any] | None:
+        kept = keys.drop_missing_legacy(s.ai_keys)
+        return None if kept == s.ai_keys else {"ai_keys": kept}
+
     def _has_key(self, provider: str) -> bool:
-        if provider == "openai_compatible":
-            return True  # локальные совместимые серверы могут не требовать авторизацию
-        target = credman.TARGETS.get(provider)
-        if target is None:
-            return True  # ollama — без ключа
-        try:
-            return credman.read(target) is not None
-        except OSError:
-            log.warning("Не удалось прочитать ключ %s из Credential Manager", provider)
-            return False
+        """Есть ли чем звать ИИ: для списка ключей — хотя бы один включённый ключ с секретом."""
+        if provider not in config.CHAIN_PROVIDERS:
+            return True  # ollama, claude_cli — без ключа
+        for e in keys.chain(self.s, provider):
+            try:
+                if credman.read(keys.target(e)) is not None:
+                    return True
+            except OSError:
+                log.warning("Не удалось прочитать ключ %s из Credential Manager", e["provider"])
+        return False
 
     def _want_ai(self, text: str, style: str, snippet_used: bool) -> bool:
         s = self.s
@@ -1796,6 +1833,7 @@ class Engine:
             "error_kind": None if err is None else (
                 err.kind if isinstance(err, ai.AIError) else type(err).__name__),
             "app": app,
+            "key_id": r.key_id if r is not None else None,
         }
         try:
             saved = self.storage.add_ai_usage(rec)
@@ -1806,16 +1844,25 @@ class Engine:
         self.bus.emit("ai_usage", kind=kind, cost_usd=saved["cost_usd"] or 0.0,
                       tokens_in=saved["tokens_in"] or 0, tokens_out=saved["tokens_out"] or 0,
                       today_cost_usd=today)
-        if err is None and provider == "openrouter":
+        if err is None and provider == "openrouter" and r is not None:
+            kid = r.key_id
+            if kid is None:                          # ключ передан мимо списка — активный
+                active = self._active_key()
+                kid = str(active["id"]) if active else None
             with self._balance_lock:
-                stale = time.monotonic() - self._balance_at >= BALANCE_TTL_S
-            if stale:
-                threading.Thread(target=self._balance_refresh, name="rupor-balance",
-                                 daemon=True).start()
+                c = self._key_checks.get(kid) if kid else None
+                stale = c is None or time.monotonic() - c[0] >= BALANCE_TTL_S
+            if kid and stale:
+                threading.Thread(target=self._balance_refresh, args=(kid,),
+                                 name="rupor-balance", daemon=True).start()
 
-    def _balance_refresh(self) -> None:
+    def _balance_refresh(self, kid: str) -> None:
         try:
-            self.ai_balance(force=False)
+            active = self._active_key()
+            if active is not None and active["id"] == kid:
+                self.ai_balance(force=False)        # и предупреждение «пополните»
+            elif keys.find(self.s.ai_keys, kid) is not None:
+                self.ai_key_info(kid, force=False)
         except Exception:
             log.exception("Не удалось обновить баланс OpenRouter")
 
@@ -1835,48 +1882,141 @@ class Engine:
     def ai_usage_stats(self) -> dict[str, Any]:
         return self.storage.ai_usage_stats()
 
+    def _active_key(self) -> dict[str, Any] | None:
+        """Ключ, который сейчас первым пойдёт в работу: первый в очереди очистки (если ИИ
+        включён и очистка облачная), иначе — командного режима. None — облачные ключи не
+        используются (Ollama, Claude Code) или списка нет."""
+        provs = ([self.s.ai_provider] if self.s.ai_enabled else []) + [self.s.command_provider]
+        for prov in provs:
+            c = keys.chain(self.s, prov)
+            if c:
+                return c[0]
+        return None
+
     def _openrouter_used(self) -> bool:
-        """OpenRouter нужен очистке или командному режиму."""
-        return OPENROUTER in (self.s.ai_provider, self.s.command_provider)
+        """Ключ OpenRouter есть в очереди очистки или командного режима."""
+        return any(e["provider"] == OPENROUTER
+                   for prov in (self.s.ai_provider, self.s.command_provider)
+                   for e in keys.chain(self.s, prov))
 
     def ai_balance(self, force: bool = False) -> dict[str, Any]:
-        """Баланс ключа OpenRouter (WS ai_balance): {balance_usd, usage_usd, limit_usd,
-        checked_at, error}. Кэш 5 минут (неудачная проверка — минута), force — мимо кэша.
-        Баланс меньше $1 — notice warn не чаще раза в сутки. Ни очистка, ни командный
-        режим не идут через OpenRouter — в сеть не ходим (error «не используется»); кнопка
-        «Обновить» (force) всё же проверяет ключ, но без предупреждения о балансе."""
-        if not force and not self._openrouter_used():
+        """Баланс ключа, который сейчас первым в очереди (WS ai_balance): {balance_usd,
+        usage_usd, limit_usd, checked_at, error, key_id, provider, label, estimate}.
+
+        OpenRouter — баланс по API (кэш 5 минут, неудачная проверка — минута; force — мимо
+        кэша). Anthropic баланса по API не отдаёт: если пользователь ввёл остаток, это
+        оценка «введённое − расход Рупора с того момента» (estimate=true), иначе error
+        «недоступно». Баланс меньше $1 — notice warn не чаще раза в сутки. Облачные ключи не
+        используются — в сеть не ходим (error «не используется»)."""
+        entry = self._active_key()
+        if entry is None:
+            err = tr("eng.balance_unused") if self.s.ai_keys else tr("eng.no_keys")
             return {"balance_usd": None, "usage_usd": None, "limit_usd": None,
-                    "checked_at": None, "error": tr("eng.balance_unused")}
-        with self._balance_fetching:        # параллельные запросы не ходят в сеть дважды
-            with self._balance_lock:
-                cached, at = self._balance, self._balance_at
-            ttl = BALANCE_TTL_S if cached is not None and not cached.get("error") \
-                else BALANCE_ERROR_TTL_S
-            if cached is not None and not force and time.monotonic() - at < ttl:
-                return dict(cached)
-            try:
-                key = credman.read(credman.TARGETS["openrouter"])
-            except OSError:
-                key = None
-                log.warning("Не удалось прочитать ключ OpenRouter из Credential Manager")
-            if not key:
-                return {"balance_usd": None, "usage_usd": None, "limit_usd": None,
-                        "checked_at": None,
-                        "error": tr("eng.openrouter_no_key")}
-            r = ai.check_openrouter_key(key)
-            res: dict[str, Any] = {"balance_usd": r.get("balance_usd"),
-                                   "usage_usd": r.get("usage_usd"),
-                                   "limit_usd": r.get("limit_usd"),
-                                   "checked_at": int(time.time()), "error": r.get("error")}
-            with self._balance_lock:
-                self._balance, self._balance_at = dict(res), time.monotonic()
-        self._check_low_balance(res.get("balance_usd"))
+                    "checked_at": None, "error": err, "key_id": None, "provider": None,
+                    "label": None, "estimate": False}
+        info = self.ai_key_info(str(entry["id"]), force)
+        res: dict[str, Any] = {k: info.get(k) for k in (
+            "balance_usd", "usage_usd", "limit_usd", "checked_at", "error")}
+        res.update(key_id=entry["id"], provider=entry["provider"],
+                   label=keys.label_of(entry, self.s.ai_keys),
+                   estimate=info.get("balance_source") == "estimate")
+        if res["balance_usd"] is not None:
+            res["error"] = None
+        with self._balance_lock:
+            self._balance, self._balance_at = dict(res), time.monotonic()
+        self._check_low_balance(res.get("balance_usd"), str(res["label"]))
         return res
 
-    def _check_low_balance(self, balance: Any) -> None:
+    def _key_check(self, entry: dict[str, Any], force: bool) -> dict[str, Any]:
+        """Проверка ключа у провайдера (сеть) с кэшем: удачная — 5 минут, неудачная — минута."""
+        kid = str(entry["id"])
+        with self._balance_fetching:        # параллельные запросы не ходят в сеть дважды
+            with self._balance_lock:
+                cached = self._key_checks.get(kid)
+            if cached is not None and not force:
+                at, r = cached
+                ttl = BALANCE_TTL_S if not r.get("error") else BALANCE_ERROR_TTL_S
+                if time.monotonic() - at < ttl:
+                    return dict(r)
+            name = keys.PROVIDER_NAMES[str(entry["provider"])]
+            try:
+                key = credman.read(keys.target(entry))
+            except OSError:
+                key = None
+                log.warning("Не удалось прочитать ключ %s из Credential Manager", name)
+            if not key:
+                return {"valid": False, "balance_usd": None, "usage_usd": None,
+                        "limit_usd": None, "checked_at": None,
+                        "error": tr("eng.key_no_secret", name=name)}
+            check = (ai.check_openrouter_key if entry["provider"] == OPENROUTER
+                     else ai.check_anthropic_key)
+            r = dict(check(key))
+            r["checked_at"] = int(time.time())
+            with self._balance_lock:
+                self._key_checks[kid] = (time.monotonic(), dict(r))
+        return r
+
+    def ai_key_info(self, kid: str, force: bool = False) -> dict[str, Any]:
+        """Проверка и баланс одного ключа списка (WS ai_key_info).
+
+        {id, provider, valid, balance_usd, balance_source: api | estimate | null,
+        usage_usd, limit_usd, spent_usd, spent_since_usd, checked_at, error}. spent_* —
+        расход Рупора через этот ключ (всего и с момента, когда введён баланс)."""
+        entry = keys.find(self.s.ai_keys, kid)
+        if entry is None:
+            raise ValueError(tr("eng.key_unknown"))
+        r = self._key_check(entry, force)
+        spent = self.storage.ai_key_spend(kid)
+        since = entry.get("balance_at")
+        spent_since = self.storage.ai_key_spend(kid, float(since)) if since is not None \
+            else None
+        res: dict[str, Any] = {
+            "id": kid, "provider": entry["provider"], "valid": bool(r.get("valid")),
+            "balance_usd": r.get("balance_usd"),
+            "balance_source": "api" if r.get("balance_usd") is not None else None,
+            "usage_usd": r.get("usage_usd"), "limit_usd": r.get("limit_usd"),
+            "spent_usd": spent["cost_usd"], "calls": spent["calls"],
+            "spent_since_usd": spent_since["cost_usd"] if spent_since else None,
+            "checked_at": r.get("checked_at"), "error": r.get("error"),
+        }
+        manual = entry.get("balance_usd")
+        if res["balance_usd"] is None and manual is not None and spent_since is not None:
+            res["balance_usd"] = round(max(0.0, float(manual) - spent_since["cost_usd"]), 4)
+            res["balance_source"] = "estimate"
+        elif res["balance_usd"] is None and r.get("valid") and entry["provider"] != OPENROUTER:
+            res["error"] = tr("eng.balance_no_api", name=keys.PROVIDER_NAMES[entry["provider"]])
+        return res
+
+    def ai_keys_list(self) -> list[dict[str, Any]]:
+        """Список ключей для настроек (WS ai_keys_list), без сети: запись + маска секрета,
+        расход Рупора через ключ и пауза после ошибки."""
+        out: list[dict[str, Any]] = []
+        entries = self.s.ai_keys
+        for e in entries:
+            kid = str(e["id"])
+            try:
+                secret = credman.read(keys.target(e))
+            except OSError:
+                secret = None
+                log.warning("Не удалось прочитать ключ %s из Credential Manager", e["provider"])
+            spent = self.storage.ai_key_spend(kid)
+            since = e.get("balance_at")
+            spent_since = (self.storage.ai_key_spend(kid, float(since))["cost_usd"]
+                           if since is not None else None)
+            cd = keys.cooldown(kid)
+            out.append({
+                **e, "title": keys.label_of(e, entries), "has_key": bool(secret),
+                "masked": credman.mask(secret) if secret else None,
+                "spent_usd": spent["cost_usd"], "calls": spent["calls"],
+                "spent_since_usd": spent_since,
+                "paused_until": int(cd.until) if cd else None,
+                "paused_reason": cd.kind if cd else None,
+            })
+        return out
+
+    def _check_low_balance(self, balance: Any, name: str = "OpenRouter") -> None:
         if (not isinstance(balance, (int, float)) or isinstance(balance, bool)
-                or balance >= LOW_BALANCE_USD or not self._openrouter_used()):
+                or balance >= LOW_BALANCE_USD or self._active_key() is None):
             return
         with self._balance_lock:
             try:
@@ -1890,7 +2030,7 @@ class Engine:
                 self.storage.kv_set(LOW_BALANCE_KEY, str(now))
             except Exception:
                 log.exception("Не удалось запомнить предупреждение о балансе")
-        self.notice(tr("eng.low_balance", balance=f"{balance:.2f}"), level="warn",
+        self.notice(tr("eng.low_balance", name=name, balance=f"{balance:.2f}"), level="warn",
                     action="open_settings_ai")
 
     # ---------- поток одной диктовки ----------
@@ -1899,12 +2039,20 @@ class Engine:
         self._prompt_local.job = job     # подсказка знает окно и контекст этой диктовки
         try:
             res = self.rec.transcribe(job.audio, language=job.sess.language)
+        except BaseException:
+            self.recordings.update(job.rec_id, status="error")
+            raise
         finally:
             self._prompt_local.job = None
         self._model_phase = "ready"
         raw = res.text.strip()
+        self.recordings.update(job.rec_id, status="ok" if raw else "empty", chars=len(raw))
         if not raw:
-            self.notice(tr("eng.no_speech"))
+            if job.rec_id is not None and res.audio_s >= NO_SPEECH_HINT_S:
+                # Длинная запись без текста — скорее сбой, чем тишина: подсказать, где она
+                self.notice(tr("eng.no_speech_saved"), level="warn", action="open_recordings")
+            else:
+                self.notice(tr("eng.no_speech"))
             return
         if job.sess.command:
             self._command_flow(job, res, raw)
@@ -1996,14 +2144,16 @@ class Engine:
 
     def _record(self, job: _Job, res: Result, raw: str, text: str, style: str, ai_used: bool,
                 latency: float, d: Delivery | None, target_kind: str | None = None,
-                words_of: str | None = None) -> None:
-        """Статистика — всегда; история — если включена. Ошибки базы диктовку не срывают."""
+                words_of: str | None = None, stats: bool = True) -> None:
+        """Статистика — всегда (кроме повторного распознавания: stats=False); история — если
+        включена. Ошибки базы диктовку не срывают."""
         text = text.strip()
         words = textproc.count_words(words_of if words_of is not None else text)
-        try:
-            self.storage.record_stats(words, res.audio_s)
-        except Exception:
-            log.exception("Не удалось записать статистику")
+        if stats:
+            try:
+                self.storage.record_stats(words, res.audio_s)
+            except Exception:
+                log.exception("Не удалось записать статистику")
         if not self.s.history_enabled:
             return
         t = job.target
@@ -2023,6 +2173,7 @@ class Engine:
         except Exception:
             log.exception("Не удалось записать историю")
             return
+        self.recordings.update(job.rec_id, history_id=saved["id"])
         self.bus.emit("history", history_display(dict(saved)))
 
     def _raw_first_ai(self, ctx: _RawFirst) -> None:
@@ -2304,6 +2455,104 @@ class Engine:
             return lf
         return None
 
+    # ---------- сохранённые записи голоса (recordings) ----------
+
+    def _rec_limits(self) -> Limits:
+        return Limits(self.s.recordings_keep, self.s.recordings_max_mb * 1024 * 1024)
+
+    def recordings_list(self) -> dict[str, Any]:
+        items = self.recordings.items()
+        return {"items": items, "total_bytes": sum(int(m["bytes"]) for m in items),
+                "keep": self.s.recordings_keep,
+                "max_bytes": self.s.recordings_max_mb * 1024 * 1024}
+
+    def recording_delete(self, rid: str) -> None:
+        if not self.recordings.delete(rid):
+            raise ValueError(tr("api.recording_not_found"))
+
+    def recordings_clear(self) -> int:
+        return self.recordings.clear()
+
+    def recording_path(self, rid: str | None = None) -> Path:
+        """Файл записи (rid) или папка записей (None) — для «Показать в проводнике»."""
+        if rid is None:
+            self.recordings.root.mkdir(parents=True, exist_ok=True)
+            return self.recordings.root
+        p = self.recordings.path(rid)
+        if p is None:
+            raise ValueError(tr("api.recording_not_found"))
+        return p
+
+    def recording_audio(self, rid: str) -> dict[str, Any]:
+        """Звук записи для прослушивания в интерфейсе (WS recording_audio): {mime, data} —
+        WAV целиком в base64 (16 кГц моно 16 бит: минута — около 2,6 МБ в base64)."""
+        import base64
+        p = self.recording_path(rid)
+        try:
+            data = p.read_bytes()
+        except OSError:
+            raise ValueError(tr("api.recording_not_found")) from None
+        return {"mime": "audio/wav", "data": base64.b64encode(data).decode("ascii")}
+
+    def recording_transcribe(self, rid: str) -> dict[str, Any]:
+        """Распознать сохранённую запись заново: словарь, сниппеты и ИИ-обработка (стиль по
+        умолчанию) — как у диктовки; результат — в истории и в «Вставить последнее».
+        В окно не вставляется (активное окно сейчас — Рупор), статистика не пополняется."""
+        audio_data = self.recordings.audio(rid)
+        if audio_data is None:
+            raise ValueError(tr("api.recording_not_found"))
+        with self._lock:
+            self._busy += 1
+        self._refresh_state()
+        t0 = time.perf_counter()
+        try:
+            try:
+                res = self.rec.transcribe(audio_data)
+            except BaseException:
+                self.recordings.update(rid, status="error")
+                raise
+            self._model_phase = "ready"
+            raw = res.text.strip()
+            self.recordings.update(rid, status="ok" if raw else "empty", chars=len(raw))
+            out: dict[str, Any] = {"id": rid, "raw": raw, "text": "", "language": res.language,
+                                   "duration_s": round(res.audio_s, 2), "ai": False}
+            if not raw:
+                return out
+            s = self.s
+            items = self._dict_items()
+            text = self._dict_apply(raw, items)
+            text, snippet_used = textproc.expand_snippets(text, self._snippets_for(items))
+            style = s.default_style
+            final, ai_used = text, False
+            if self._want_ai(text, style, snippet_used):
+                with self._lock:
+                    self._ai_busy = True
+                self._refresh_state()
+                try:
+                    terms = [str(d["term"]) for d in items]
+                    final = self._ai_call(
+                        "cleanup", "", lambda: ai.cleanup(text, style, s, terms,
+                                                          **_cleanup_kwargs(res.language))).text
+                    final = self._dict_apply(final, items)
+                    ai_used = True
+                except Exception as e:
+                    self._ai_failed(e)
+                finally:
+                    with self._lock:
+                        self._ai_busy = False
+            final = final.strip()
+            self.last_text = final
+            sess = _Session(0, time.monotonic(), time.time())
+            job = _Job(sess, audio_data, t0, None, rid)
+            self._record(job, res, raw, final, style, ai_used,
+                         (time.perf_counter() - t0) * 1000, None, stats=False)
+            out.update(text=final, ai=ai_used)
+            return out
+        finally:
+            with self._lock:
+                self._busy = max(0, self._busy - 1)
+            self._refresh_state(force=True)
+
     def insert_text(self, text: str) -> None:
         """Вставить текст в последнее «чужое» окно (history_reinsert, last_insert)."""
         text = text.strip()
@@ -2336,6 +2585,50 @@ class Engine:
             raise ValueError(tr("eng.copy_nothing_yet"))
         inject.clipboard_set_text(text)
         self.notice(tr("eng.copied"), toast=False)
+
+    def convert_layout(self) -> bool:
+        """Выделенный текст активного окна — в другую раскладку (ghbdtn ↔ привет), поверх
+        выделения. Механически, без ИИ; в историю и «Вставить последнее» не попадает.
+        True — текст заменён."""
+        s = self.s
+        target = winutil.foreground()
+        if target is None or not self._is_foreign(target):
+            self.notice(tr("eng.layout_no_window"), level="warn")
+            return False
+        if winutil.is_terminal(target):
+            # в терминале ввод не заменяет выделение — текст дописался бы в командную строку
+            self.notice(tr("eng.layout_terminal"), level="warn")
+            return False
+        if winutil.blocked_by_uipi(target):
+            self.notice(tr("eng.window_admin", name=target.title or target.process),
+                        level="warn", action="relaunch_admin")
+            return False
+        # Правки пользователя до смены раскладки — обучению словаря; саму замену оно не видит
+        self._learn_stop("смена раскладки")
+        try:
+            selected = read_selection(target, s)
+        except OSError as e:  # буфер занят — копирование даже не отправлялось
+            self.notice(tr("eng.layout_error", error=e), level="warn")
+            return False
+        if selected is None or not selected.strip():
+            if selected is None and _is_rdp_info(target, s):
+                self.notice(tr("eng.cmd_rdp_selection"), level="warn")
+            else:
+                self.notice(tr("eng.layout_select"), level="warn")
+            return False
+        out = layout.convert(selected)
+        if out == selected:
+            self.notice(tr("eng.layout_nothing"), level="warn")
+            return False
+        fg = winutil.foreground()
+        if fg is None or fg.hwnd != target.hwnd:
+            self.notice(tr("eng.layout_window_changed"), level="warn")
+            return False
+        d = self._safe_deliver(out, False)
+        if d.ok:
+            log.info("Раскладка выделенного сменена: %d симв. (%s)", len(out),
+                     layout.detect(selected))
+        return d.ok
 
     def _insert_to(self, text: str, target: winutil.WindowInfo) -> None:
         fg = winutil.foreground()
@@ -2396,6 +2689,8 @@ class Engine:
             with self._balance_lock:
                 if self._balance is not None and self._balance.get("error"):
                     self._balance, self._balance_at = None, 0.0
+                self._key_checks = {k: v for k, v in self._key_checks.items()
+                                    if not v[1].get("error")}
         hotkeys = any(k in config.HOTKEY_FIELDS for k in changed)
         if (hotkeys or "input_device" in changed) and self._session is not None:
             # Автомат жестов и микрофон меняются — идущую запись завершаем явно
@@ -2410,12 +2705,15 @@ class Engine:
             self._jobs.put(("reload", None))
         if "history_retention_days" in changed:
             threading.Thread(target=self._purge, args=(True,), daemon=True).start()
+        if "recordings_keep" in changed or "recordings_max_mb" in changed:
+            threading.Thread(target=self.recordings.prune, args=(self._rec_limits(),),
+                             name="rupor-rec-prune", daemon=True).start()
         if "sounds" in changed and s.sounds:
             try:
                 sounds.prepare()
             except Exception:
                 log.exception("Не удалось подготовить звуки")
-        if "ai_enabled" in changed or "ai_provider" in changed:
+        if "ai_enabled" in changed or "ai_provider" in changed or "ai_keys" in changed:
             self._nokey_warned = False
         if "duck_mode" in changed or "duck_level" in changed:
             # Во время записи: «Не трогать» — вернуть звук; другой режим или уровень — вернуть
@@ -2429,12 +2727,18 @@ class Engine:
                 and self._model_phase == "error"):
             self._jobs.put(("load", None))
 
-    def key_changed(self) -> None:
-        """Ключ ИИ добавлен/удалён — снова предупредить, если его нет; баланс — заново."""
+    def key_changed(self, kid: str | None = None) -> None:
+        """Ключ ИИ добавлен/заменён/удалён — снова предупредить, если его нет; баланс и пауза
+        после ошибки — заново (kid — только этого ключа)."""
         self._nokey_warned = False
+        keys.reset(kid)
         with self._balance_lock:
             self._balance = None
             self._balance_at = 0.0
+            if kid is None:
+                self._key_checks.clear()
+            else:
+                self._key_checks.pop(kid, None)
 
     # ---------- фон: выгрузка модели, срок хранения истории ----------
 
