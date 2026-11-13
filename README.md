@@ -2,6 +2,9 @@
 
 **English** · [Русский](README.ru.md)
 
+**Fork by d1ms1m.** Based on [listapad2024/rupor](https://github.com/listapad2024/rupor).
+See [the 0.6.0 release notes](docs/releases/v0.6.0-d1ms1m.md) for differences from upstream.
+
 **Rupor** (Russian *Рупор*, "megaphone") is a free, open-source voice dictation app for Windows.
 Hold **Ctrl+Win**, say a phrase, release — the text appears wherever your cursor is. Rupor works
 in any app: browsers, messengers, email, IDEs, Office — and in **Remote Desktop (RDP) sessions**,
@@ -123,8 +126,8 @@ Rupor works in English and Russian — both the interface and the dictation.
 
 ## Installation
 
-1. Download `Rupor_<version>_x64-setup.exe` from the
-   [Releases](https://github.com/listapad2024/rupor/releases/latest) page.
+1. Download `Rupor_<version>_d1ms1m_x64-setup.exe` from the
+   [Releases](https://github.com/d1ms1m/rupor/releases/latest) page.
 2. Run the installer and pick its language. The installer isn't signed with a publisher
    certificate, so Windows SmartScreen shows "Windows protected your PC" with "Unknown
    publisher". Click **More info → Run anyway**. Your browser may also warn that the file isn't
@@ -154,7 +157,9 @@ the computer at first launch, the wizard is skipped.
 
 **Uninstalling**: Windows Settings → Apps → Installed apps (on Windows 10 — Apps & features) →
 Rupor (Рупор if you installed it in Russian) → Uninstall. The "Delete the application data"
-checkbox wipes settings, history, logs, the CUDA libraries and the AI keys in Credential Manager.
+checkbox wipes settings, history, logs, the CUDA libraries and all Rupor AI credentials
+(`Rupor/*`), including additional cloud keys and the OpenAI-compatible API key.
+Updating, or uninstalling without this checkbox, preserves the keys.
 The model lives in the model folder — by default the shared Hugging Face cache
 (`%USERPROFILE%\.cache\huggingface\hub\models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`),
 or the folder you chose yourself; delete it by hand if you need to.
@@ -207,7 +212,8 @@ anywhere, and you can insert it with Paste last. If focus moves during a broadca
 Alt+Tab, a disconnect dialog), the broadcast stops. In mRemoteNG and RDCMan all tabs are one
 window, so only the active tab gets the text.
 
-**Command mode** works through AI: OpenRouter or the local Claude Code CLI (`claude -p`). Rupor
+**Command mode** uses the selected provider: cloud keys by priority (OpenRouter/Anthropic),
+OpenAI-compatible API, Ollama, or the local Claude Code CLI (`claude -p`). Rupor
 reads the selected text, sends it to the AI together with your command and replaces the selection
 with the answer. If in the meantime you switched windows, pressed keys or the selection changed,
 the answer isn't inserted but kept for Paste last. Command mode doesn't work in terminals or in
@@ -517,7 +523,7 @@ in Russian.
 **Environment and checks**:
 
 ```bat
-git clone https://github.com/listapad2024/rupor.git
+git clone https://github.com/d1ms1m/rupor.git
 cd rupor
 py -3.13 -m venv .venv
 .venv\Scripts\pip install -e ".[dev]"
@@ -559,12 +565,13 @@ build.cmd core     :: the engine only, its copy into the Tauri resources and the
 ```
 
 The finished installer is `ui\src-tauri\target\release\bundle\nsis\Рупор_<version>_x64-setup.exe`
-(≈ 55 MB). On the Releases page the same file is published as `Rupor_<version>_x64-setup.exe`:
-GitHub rewrites non-ASCII characters in asset names. The engine is built without the CUDA DLLs
+(size depends on the runtime and dependencies). On this fork’s Releases page the same file is published as `Rupor_<version>_d1ms1m_x64-setup.exe`:
+The `d1ms1m` suffix identifies this fork’s build. The engine is built without the CUDA DLLs
 and without the model (the first-run wizard downloads them), and without PyAV/FFmpeg: it doesn't
 need to read audio files.
-Before packaging, `build.cmd` checks the built engine (`packaging\verify_core.py`) and stops if
-its version doesn't match the UI. So build the installer with `build.cmd`, not with
+Before packaging, `build.cmd` checks the built engine (`packaging\verify_core.py`): UI Automation,
+spelling, audio interfaces, vocabulary data and localization. Tauri checks that the source-version
+metadata agrees across Python, Cargo and the UI. So build the installer with `build.cmd`, not with
 `npm run tauri build`. `install-rupor.cmd` silently installs a fresh build on this computer
 (cuBLAS is taken from `.venv` so it isn't downloaded again) and starts Rupor; the install log is
 `%TEMP%\rupor_install.log`. Start it from File Explorer or a regular Command Prompt, not from a

@@ -6,7 +6,24 @@ All notable changes to Rupor are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-11-08
+## [0.6.0] — d1ms1m, 2026-11-12
+
+### Fork additions
+
+Based on upstream 0.6.0 (2026-11-08). Full Russian release notes and differences:
+[Rupor 0.6.0 — d1ms1m](docs/releases/v0.6.0-d1ms1m.md).
+
+- Configurable OpenAI-compatible API for cleanup and commands, optional credential,
+  additional JSON parameters and cache-aware manual tariffs with persistent cost provenance.
+- Fixed modal dropdown layering, empty dictionary/snippet export, and clipped card/focus highlights.
+- SQLite schema 5 reconciles the fork and upstream schema-4 layouts; provider settings and
+  command-provider priority survive the upgrade.
+- Uninstall with “Delete the application data” removes all `Rupor/*` credentials, including
+  OpenAI-compatible and additional cloud keys. Updates and uninstall without that option retain them.
+- Updated fork download/build instructions and dependency notices; compatible strict type checking
+  with both typed and untyped comtypes releases.
+
+The following features and fixes come from upstream 0.6.0:
 
 ### Added
 
@@ -258,7 +275,7 @@ First public release.
 - Tray icon, start with Windows, light and dark themes, first-run wizard; a per-user NSIS
   installer without administrator rights.
 
-[0.6.0]: https://github.com/listapad2024/rupor/compare/v0.4.3...v0.6.0
+[0.6.0]: https://github.com/d1ms1m/rupor/compare/6c25c66a255343bc9e4cf9d9dd034885c609b244...v0.6.0
 [0.4.3]: https://github.com/listapad2024/rupor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/listapad2024/rupor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/listapad2024/rupor/compare/v0.4.0...v0.4.1

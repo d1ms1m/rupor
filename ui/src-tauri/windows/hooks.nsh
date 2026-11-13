@@ -12,7 +12,7 @@
 ;    $LOCALAPPDATA\<identifier> (кэш WebView2). Данные Рупора лежат в других местах:
 ;    %APPDATA%\Rupor (настройки, история диктовок rupor.db, журналы), %LOCALAPPDATA%\Rupor
 ;    (DLL CUDA, около 2 ГБ) и ключи ИИ в диспетчере учётных данных Windows
-;    (Rupor/openrouter, Rupor/anthropic — см. core/rupor/credman.py). Удаляем и их.
+;    (все записи Rupor/* — см. core/rupor/credman.py и core/rupor/keys.py). Удаляем и их.
 ;    При обновлении (/UPDATE) и без галочки данные не трогаем: деинсталлятор старой версии
 ;    запускается и при обычной установке новой версии поверх («удалить перед установкой»),
 ;    а скачивать CUDA заново после каждого обновления незачем.
@@ -55,6 +55,67 @@ LangString RuporRemovingCuda ${RUPOR_LANG_EN} "Removing components Rupor downloa
 LangString RuporRemovingCuda ${RUPOR_LANG_RU} "Удаление загруженных компонентов Рупора (CUDA): $LOCALAPPDATA\Rupor"
 LangString RuporKeysRemoved ${RUPOR_LANG_EN} "Rupor's AI keys removed from Windows Credential Manager"
 LangString RuporKeysRemoved ${RUPOR_LANG_RU} "Ключи ИИ Рупора удалены из диспетчера учётных данных"
+LangString RuporKeysFailed ${RUPOR_LANG_EN} "Some Rupor AI keys could not be removed from Windows Credential Manager"
+LangString RuporKeysFailed ${RUPOR_LANG_RU} "Не удалось удалить некоторые ключи ИИ Рупора из диспетчера учётных данных"
+
+; Enumerate the app namespace, including keys no longer listed in settings.json.
+; Keep TargetName as a pointer so NSIS string length limits cannot truncate it.
+; Filter is parameterized for an integration test using synthetic credentials only.
+!macro RUPOR_REMOVE_CREDENTIALS Filter
+  ${If} $DeleteAppDataCheckboxState = 1
+  ${AndIf} $UpdateMode <> 1
+    Push $0
+    Push $1
+    Push $2
+    Push $3
+    Push $4
+    Push $5
+    Push $6
+    Push $7
+    Push $8
+    StrCpy $7 0
+    System::Call 'advapi32::CredEnumerateW(w "${Filter}", i 0, *i .r0, *p .r1) i .r6 ?e'
+    Pop $8
+    ${If} $6 <> 0
+      StrCpy $2 $1
+      ${While} $0 > 0
+        System::Call '*$1(p .r3)'
+        ; CREDENTIALW starts with DWORD Flags, DWORD Type, LPWSTR TargetName.
+        System::Call '*$3(i .r6, i .r4, p .r5)'
+        System::Call 'advapi32::CredDeleteW(p r5, i r4, i 0) i .r6 ?e'
+        Pop $8
+        ${If} $6 = 0
+          ; Another process may already have removed this credential.
+          ${If} $8 <> 1168
+            StrCpy $7 1
+          ${EndIf}
+        ${EndIf}
+        IntOp $1 $1 + ${NSIS_PTR_SIZE}
+        IntOp $0 $0 - 1
+      ${EndWhile}
+      System::Call 'advapi32::CredFree(p r2)'
+    ${Else}
+      ${If} $8 <> 1168
+        StrCpy $7 1
+      ${EndIf}
+    ${EndIf}
+    ${If} $7 = 0
+      DetailPrint "$(RuporKeysRemoved)"
+    ${Else}
+      DetailPrint "$(RuporKeysFailed)"
+      SetErrorLevel 1
+    ${EndIf}
+    Pop $8
+    Pop $7
+    Pop $6
+    Pop $5
+    Pop $4
+    Pop $3
+    Pop $2
+    Pop $1
+    Pop $0
+  ${EndIf}
+!macroend
 
 ; 1, если в $INSTDIR\core перед удалением было наше ядро (rupor-core.exe).
 Var RuporCoreInstalled
@@ -126,9 +187,6 @@ Var RuporCoreInstalled
       DetailPrint "$(RuporRemovingCuda)"
       RMDir /r /REBOOTOK "$LOCALAPPDATA\Rupor"
     ${EndIf}
-    ; CRED_TYPE_GENERIC = 1; ключа может и не быть — результат не важен
-    System::Call 'advapi32::CredDeleteW(w "Rupor/openrouter", i 1, i 0) i .r0'
-    System::Call 'advapi32::CredDeleteW(w "Rupor/anthropic", i 1, i 0) i .r0'
-    DetailPrint "$(RuporKeysRemoved)"
+    !insertmacro RUPOR_REMOVE_CREDENTIALS "Rupor/*"
   ${EndIf}
 !macroend

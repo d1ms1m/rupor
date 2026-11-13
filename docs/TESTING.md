@@ -29,6 +29,11 @@ cd ui\src-tauri && cargo clippy --all-targets -- -D warnings && cargo test && cd
 
 Дополнительно:
 
+- `tests/test_installer_credentials.py` — настоящий NSIS-скрипт и синтетические ключи в
+  отдельном случайном пространстве имён. Проверяет удаление ключей всех провайдеров и
+  дополнительных ключей, сохранение при обновлении/без галочки, чужой префикс и повторную
+  очистку. Нужны Windows и NSIS; путь к компилятору можно задать в `RUPOR_MAKENSIS`.
+  Без NSIS тест пропускается; при выпуске установщика его следует запустить явно.
 - `cargo test -- --ignored real_core_smoke` (в `ui\src-tauri`) — оболочка с настоящим ядром из
   `.venv` (`--sidecar --no-hook --no-mutex`);
 - `.venv\Scripts\python tools\ws_smoke.py` — дымовой тест ядра по WebSocket (в том числе смена

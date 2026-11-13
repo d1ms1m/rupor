@@ -3,7 +3,7 @@
 [English](THIRD_PARTY_NOTICES.md) · **Русский**
 
 Сам Рупор распространяется по лицензии MIT (см. [LICENSE](LICENSE)). В этом файле перечислено
-стороннее ПО, которое входит в установщик (`Rupor_<версия>_x64-setup.exe` на странице Releases;
+стороннее ПО, которое входит в установщик (`Rupor_<версия>_d1ms1m_x64-setup.exe` на странице Releases;
 при локальной сборке файл называется `Рупор_<версия>_x64-setup.exe`) или которое программа
 скачивает при первом запуске, и лицензии этого ПО. Сторонние компоненты не модифицируются: в
 сборку попадают файлы из опубликованных пакетов (колёс PyPI, пакетов npm, крейтов crates.io);
@@ -12,7 +12,7 @@ PyInstaller лишь компилирует модули Python в байт-ко
 
 Полных текстов лицензий здесь нет: они лежат в самих пакетах (каталоги `*.dist-info/licenses`,
 файлы `LICENSE` в `node_modules` и в исходниках крейтов) и доступны по ссылкам. Версии указаны
-для сборки **0.3.0**. Как пересобрать перечень после обновления зависимостей, описано
+для сборки **0.6.0 d1ms1m**. Как пересобрать перечень после обновления зависимостей, описано
 [в конце файла](#как-обновить-перечень).
 
 ## Коротко
@@ -44,11 +44,11 @@ PyInstaller лишь компилирует модули Python в байт-ко
 
 | Компонент | Версия | Лицензия | Ссылка |
 |---|---|---|---|
-| CPython (интерпретатор и стандартная библиотека) | 3.13.3 | PSF-2.0 | https://docs.python.org/3.13/license.html |
-| — OpenSSL (`libssl-3.dll`, `libcrypto-3.dll`) | 3.0.16 | Apache-2.0 | https://www.openssl.org/source/license.html |
+| CPython (интерпретатор и стандартная библиотека) | 3.14.5 | PSF-2.0 | https://docs.python.org/3.14/license.html |
+| — OpenSSL (`libssl-3.dll`, `libcrypto-3.dll`) | 3.0.20 | Apache-2.0 | https://www.openssl.org/source/license.html |
 | — libffi (`libffi-8.dll`) | 3.4 | MIT | https://github.com/libffi/libffi |
-| — SQLite (`sqlite3.dll`) | 3.49.1 | общественное достояние | https://www.sqlite.org/copyright.html |
-| — Expat, zlib, bzip2, liblzma (xz), mpdecimal (внутри модулей Python) | — | MIT, Zlib, bzip2-1.0.6, 0BSD, BSD-2-Clause | https://docs.python.org/3.13/license.html |
+| — SQLite (`sqlite3.dll`) | 3.50.4 | общественное достояние | https://www.sqlite.org/copyright.html |
+| — Expat, zlib, bzip2, liblzma (xz), mpdecimal (внутри модулей Python) | — | MIT, Zlib, bzip2-1.0.6, 0BSD, BSD-2-Clause | https://docs.python.org/3.14/license.html |
 | Загрузчик PyInstaller (часть `rupor-core.exe`) | 6.22.3 | GPL-2.0-or-later с исключением для загрузчика | https://pyinstaller.org/en/stable/license.html |
 | Microsoft Visual C++ Runtime и Universal CRT (`vcruntime140*.dll`, `msvcp140*.dll`, `ucrtbase.dll`, `api-ms-win-*.dll`) | — | распространяемые компоненты Microsoft (Visual Studio / Windows SDK) | https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files |
 
@@ -63,35 +63,35 @@ PyInstaller лишь компилирует модули Python в байт-ко
 | Пакет | Версия | Лицензия (SPDX) | Исходники |
 |---|---|---|---|
 | anyio | 4.15.1 | MIT | https://github.com/agronholm/anyio |
-| certifi | 2026.7.22 | MPL-2.0 | https://github.com/certifi/python-certifi |
+| certifi | 2026.10.18 | MPL-2.0 | https://github.com/certifi/python-certifi |
 | cffi (только `_cffi_backend`) | 2.1.1 | MIT-0 | https://github.com/python-cffi/cffi |
 | click | 8.5.0 | BSD-3-Clause | https://github.com/pallets/click |
 | colorama | 0.4.6 | BSD-3-Clause | https://github.com/tartley/colorama |
 | comtypes | 1.4.17 | MIT | https://github.com/enthought/comtypes |
-| ctranslate2 | 4.8.2 | MIT | https://github.com/OpenNMT/CTranslate2 |
+| ctranslate2 | 4.8.3 | MIT | https://github.com/OpenNMT/CTranslate2 |
 | faster-whisper | 1.2.1 | MIT | https://github.com/SYSTRAN/faster-whisper |
-| filelock | 4.0.3 | MIT | https://github.com/tox-dev/filelock |
+| filelock | 4.2.4 | MIT | https://github.com/tox-dev/filelock |
 | fsspec | 2026.9.0 | BSD-3-Clause | https://github.com/fsspec/filesystem_spec |
 | h11 | 0.16.0 | MIT | https://github.com/python-hyper/h11 |
-| hf-xet | 1.6.0 | Apache-2.0 | https://github.com/huggingface/xet-core |
+| hf-xet | 1.7.0 | Apache-2.0 | https://github.com/huggingface/xet-core |
 | httpcore | 1.0.9 | BSD-3-Clause | https://github.com/encode/httpcore |
 | httpx | 0.28.1 | BSD-3-Clause | https://github.com/encode/httpx |
 | huggingface_hub | 1.33.0 | Apache-2.0 | https://github.com/huggingface/huggingface_hub |
 | idna | 3.20 | BSD-3-Clause | https://github.com/kjd/idna |
-| numpy | 2.5.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | https://github.com/numpy/numpy |
-| onnxruntime | 1.30.0 | MIT | https://github.com/microsoft/onnxruntime |
+| numpy | 2.5.4 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | https://github.com/numpy/numpy |
+| onnxruntime | 1.31.0 | MIT | https://github.com/microsoft/onnxruntime |
 | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
-| pillow | 12.3.0 | MIT-CMU | https://github.com/python-pillow/Pillow |
+| pillow | 13.0.0 | MIT-CMU | https://github.com/python-pillow/Pillow |
 | Pygments | 2.21.0 | BSD-2-Clause | https://github.com/pygments/pygments |
 | pystray | 0.19.5 | **LGPL-3.0-or-later** — см. [LGPL](#lgpl-и-mpl) | https://github.com/moses-palmer/pystray |
 | PyYAML | 6.0.3 | MIT | https://github.com/yaml/pyyaml |
 | setuptools (`pkg_resources`, `_distutils_hack`) | 84.0.0 | MIT | https://github.com/pypa/setuptools |
 | six | 1.17.0 | MIT | https://github.com/benjaminp/six |
 | sounddevice | 0.5.6 | MIT | https://github.com/spatialaudio/python-sounddevice |
-| tokenizers | 0.23.2 | Apache-2.0 | https://github.com/huggingface/tokenizers |
+| tokenizers | 0.23.3 | Apache-2.0 | https://github.com/huggingface/tokenizers |
 | tqdm | 4.70.1 | MPL-2.0 AND MIT | https://github.com/tqdm/tqdm |
 | typing_extensions | 4.16.0 | PSF-2.0 | https://github.com/python/typing_extensions |
-| websockets | 17.1 | BSD-3-Clause | https://github.com/python-websockets/websockets |
+| websockets | 17.2 | BSD-3-Clause | https://github.com/python-websockets/websockets |
 
 `tokenizers` и `hf-xet` написаны на Rust и статически включают крейты под лицензиями MIT,
 Apache-2.0 и совместимыми с ними; их перечень — SBOM в каталоге `*.dist-info/sboms` колеса.
@@ -117,7 +117,7 @@ faster-whisper) и там распространяется по своим ли�
 | ONNX Runtime | `onnxruntime/capi/onnxruntime*.dll` | MIT | сторонние компоненты — [ThirdPartyNotices.txt](https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt) |
 | Silero VAD v6 | `faster_whisper/assets/silero_vad_v6.onnx` | MIT | детектор речи; https://github.com/snakers4/silero-vad |
 | OpenBLAS (scipy-openblas) | `numpy.libs/libscipy_openblas64_*.dll` | BSD-3-Clause | включает LAPACK (BSD-3-Clause-Open-MPI) и среду выполнения GCC (GPL-3.0-or-later WITH GCC-exception-3.1); подробно — `numpy-*.dist-info/licenses/LICENSE.txt` |
-| Библиотеки Pillow | внутри `PIL/_imaging*.pyd`, `PIL/_avif*.pyd`, `PIL/_webp*.pyd` | brotli 1.2.0 (MIT), FreeType 2.14.3 (FTL), HarfBuzz 14.2.1 (MIT), Little CMS 2.19.1 (MIT), libavif 1.4.2 (BSD-2-Clause, с частями dav1d и libyuv под BSD), libjpeg-turbo 3.1.4.1 (IJG, BSD-3-Clause, Zlib), libpng 1.6.58 (libpng-2.0), libwebp 1.6.0 (BSD-3-Clause), OpenJPEG 2.5.4 (BSD-2-Clause), LibTIFF 4.7.1 (libtiff), xz 5.8.3 (0BSD), zlib-ng 2.3.3 (Zlib) | тексты — `LICENSE` колеса Pillow; Pillow используется только для иконки трея |
+| Библиотеки Pillow | внутри `PIL/_imaging*.pyd`, `PIL/_avif*.pyd`, `PIL/_webp*.pyd` | brotli 1.2.0 (MIT), FreeType 2.14.3 (FTL), HarfBuzz 14.2.1 (MIT), Little CMS 2.19.1 (MIT), libavif 1.4.2 (BSD-2-Clause, с частями dav1d и libyuv под BSD), libjpeg-turbo 3.2.0 (IJG, BSD-3-Clause, Zlib), libpng 1.6.58 (libpng-2.0), libwebp 1.6.0 (BSD-3-Clause), OpenJPEG 2.5.4 (BSD-2-Clause), LibTIFF 4.7.2 (libtiff), xz 5.8.3 (0BSD), zlib-ng 2.3.3 (Zlib) | тексты — `LICENSE` колеса Pillow; Pillow используется только для иконки трея |
 
 ### 1.4. Собственные данные ядра
 
@@ -136,6 +136,7 @@ Snowball (алгоритм: M. Porter, https://snowballstem.org, BSD-3-Clause).
 | @fontsource-variable/inter | 5.3.0 | OFL-1.1 | https://github.com/fontsource/font-files |
 | @tauri-apps/api | 2.11.1 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
 | @tauri-apps/plugin-autostart | 2.5.1 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
+| @tauri-apps/plugin-dialog | 2.7.3 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
 | framer-motion | 12.43.0 | MIT | https://github.com/motiondivision/motion |
 | motion-dom | 12.43.0 | MIT | https://github.com/motiondivision/motion |
 | motion-utils | 12.39.0 | MIT | https://github.com/motiondivision/motion |
@@ -161,25 +162,28 @@ Snowball (алгоритм: M. Porter, https://snowballstem.org, BSD-3-Clause).
 
 Крейты, которые компилируются в `rupor.exe` для `x86_64-pc-windows-msvc` (обычные зависимости
 без процедурных макросов и сборочных зависимостей: они работают только при компиляции и в
-программу не попадают). Всего 164 крейта; все лицензии разрешительные, кроме MPL-2.0 у
+программу не попадают). Всего 167 крейта; все лицензии разрешительные, кроме MPL-2.0 у
 `option-ext` (см. [MPL](#lgpl-и-mpl)).
 
 | Лицензия (SPDX) | Крейты |
 |---|---|
-| MIT OR Apache-2.0 (108) | anyhow 1.0.104, base64 0.23.1, bitflags 2.13.2, cfg-if 1.0.5, cookie 0.18.2, crc32fast 1.5.2, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, ctor 0.8.0, deranged 0.5.8, dirs 6.0.0, dirs-sys 0.5.0, equivalent 1.0.2, erased-serde 0.4.10, fdeflate 0.3.7, flate2 1.1.10, fnv 1.0.7, form_urlencoded 1.2.2, getrandom 0.3.4, glob 0.3.4, hashbrown 0.17.1, heck 0.5.0, http 1.5.0, idna 1.1.0, idna_adapter 1.2.2, image 0.25.10, indexmap 2.14.2, itoa 1.0.18, json-patch 3.0.1, jsonptr 0.6.3, keyboard-types 0.7.0, libc 0.2.189, lock_api 0.4.14, log 0.4.34, mime 0.3.17, muda 0.19.3, num-conv 0.2.2, num-traits 0.2.19, once_cell 1.21.4, parking_lot 0.12.5, parking_lot_core 0.9.12, percent-encoding 2.3.2, pin-project-lite 0.2.17, png 0.18.1, powerfmt 0.2.0, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, scopeguard 1.2.0, semver 1.0.28, serde 1.0.229, serde-untagged 0.1.9, serde_core 1.0.229, serde_json 1.0.151, serde_spanned 1.1.1, serde_with 3.23.0, serialize-to-javascript 0.1.2, siphasher 1.0.4, smallvec 1.16.2, socket2 0.6.5, softbuffer 0.4.8, stable_deref_trait 1.2.1, tauri 2.11.6, tauri-plugin-autostart 2.5.1, tauri-plugin-single-instance 2.4.5, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, tauri-utils 2.9.3, thiserror 1.0.69, thiserror 2.0.21, time 0.3.55, time-core 0.1.9, toml 1.1.6+spec-1.1.0, toml_datetime 1.1.1+spec-1.1.0, toml_parser 1.1.3+spec-1.1.0, toml_writer 1.1.2+spec-1.1.0, tray-icon 0.24.2, typeid 1.0.3, unic-char-property 0.9.0, unic-char-range 0.9.0, unic-common 0.9.0, unic-ucd-ident 0.9.0, unic-ucd-version 0.9.0, unicode-segmentation 1.13.3, url 2.5.8, utf8_iter 1.0.4, uuid 1.26.1, winapi 0.3.9, window-vibrancy 0.6.0, windows 0.61.3, windows-collections 0.2.0, windows-core 0.61.2, windows-future 0.2.1, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-result 0.3.4, windows-strings 0.4.2, windows-sys 0.59.0, windows-sys 0.60.2, windows-sys 0.61.2, windows-targets 0.52.6, windows-targets 0.53.5, windows-threading 0.1.0, windows-version 0.1.7, windows_x86_64_msvc 0.52.6, windows_x86_64_msvc 0.53.1, wry 0.55.1 |
-| MIT (19) | auto-launch 0.5.0, bytes 1.12.1, cfb 0.7.3, infer 0.19.0, mio 1.2.3, phf 0.13.1, phf_shared 0.13.1, plist 1.10.1, quick-xml 0.42.0, simd-adler32 0.3.10, tokio 1.53.1, tracing 0.1.44, tracing-core 0.1.36, urlpattern 0.3.0, webview2-com 0.38.2, webview2-com-sys 0.38.2, winnow 1.0.4, winreg 0.10.1, zmij 1.0.23 |
+| MIT OR Apache-2.0 (91) | anyhow 1.0.104, base64 0.23.1, bitflags 2.13.2, cfg-if 1.0.5, cookie 0.18.2, crc32fast 1.5.2, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, deranged 0.5.8, dirs 6.0.0, dirs-sys 0.5.0, erased-serde 0.4.10, fdeflate 0.3.7, flate2 1.1.10, form_urlencoded 1.2.2, getrandom 0.3.4, glob 0.3.4, hashbrown 0.17.1, heck 0.5.0, http 1.5.0, idna 1.1.0, image 0.25.10, itoa 1.0.18, json-patch 3.0.1, jsonptr 0.6.3, keyboard-types 0.7.0, libc 0.2.189, lock_api 0.4.14, log 0.4.34, mime 0.3.17, num-conv 0.2.2, num-traits 0.2.19, once_cell 1.21.4, parking_lot 0.12.5, parking_lot_core 0.9.12, percent-encoding 2.3.2, png 0.18.1, powerfmt 0.2.0, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, scopeguard 1.2.0, semver 1.0.28, serde 1.0.229, serde-untagged 0.1.9, serde_core 1.0.229, serde_json 1.0.151, serde_spanned 1.1.1, serde_with 3.23.0, serialize-to-javascript 0.1.2, siphasher 1.0.4, smallvec 1.16.2, socket2 0.6.5, softbuffer 0.4.8, stable_deref_trait 1.2.1, thiserror 1.0.69, thiserror 2.0.21, time 0.3.55, time-core 0.1.9, toml 1.1.6+spec-1.1.0, toml_datetime 1.1.1+spec-1.1.0, toml_parser 1.1.3+spec-1.1.0, toml_writer 1.1.2+spec-1.1.0, tray-icon 0.24.2, typeid 1.0.3, unic-char-property 0.9.0, unic-char-range 0.9.0, unic-common 0.9.0, unic-ucd-ident 0.9.0, unic-ucd-version 0.9.0, unicode-segmentation 1.13.3, url 2.5.8, winapi 0.3.9, windows 0.61.3, windows-collections 0.2.0, windows-core 0.61.2, windows-future 0.2.1, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-result 0.3.4, windows-strings 0.4.2, windows-sys 0.59.0, windows-sys 0.60.2, windows-sys 0.61.2, windows-targets 0.52.6, windows-targets 0.53.5, windows-threading 0.1.0, windows-version 0.1.7, windows_x86_64_msvc 0.52.6, windows_x86_64_msvc 0.53.1 |
+| MIT (20) | auto-launch 0.5.0, bytes 1.12.1, cfb 0.7.3, infer 0.19.0, mio 1.2.3, phf 0.13.1, phf_shared 0.13.1, plist 1.10.1, quick-xml 0.42.0, rfd 0.16.0, simd-adler32 0.3.10, tokio 1.53.1, tracing 0.1.44, tracing-core 0.1.36, urlpattern 0.3.0, webview2-com 0.38.2, webview2-com-sys 0.38.2, winnow 1.0.4, winreg 0.10.1, zmij 1.0.23 |
+| Apache-2.0 OR MIT (19) | ctor 0.8.0, equivalent 1.0.2, fnv 1.0.7, idna_adapter 1.2.2, indexmap 2.14.2, muda 0.19.3, pin-project-lite 0.2.17, tauri 2.11.6, tauri-plugin-autostart 2.5.1, tauri-plugin-dialog 2.7.3, tauri-plugin-fs 2.5.2, tauri-plugin-single-instance 2.4.5, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, tauri-utils 2.9.3, utf8_iter 1.0.4, uuid 1.26.1, window-vibrancy 0.6.0, wry 0.55.1 |
 | Unicode-3.0 (15) | icu_collections 2.3.0, icu_locale_core 2.3.0, icu_normalizer 2.3.0, icu_normalizer_data 2.3.0, icu_properties 2.3.0, icu_properties_data 2.3.0, icu_provider 2.3.1, litemap 0.8.3, potential_utf 0.1.6, tinystr 0.8.4, writeable 0.6.4, yoke 0.8.3, zerofrom 0.1.8, zerotrie 0.2.5, zerovec 0.11.8 |
-| MIT OR Unlicense (7) | aho-corasick 1.1.5, byteorder 1.5.0, byteorder-lite 0.1.0, memchr 2.8.3, same-file 1.0.6, walkdir 2.5.0, winapi-util 0.1.11 |
-| MIT OR Apache-2.0 OR Zlib (4) | bytemuck 1.25.2, miniz_oxide 0.8.9, miniz_oxide 0.9.1, raw-window-handle 0.6.2 |
-| Apache-2.0 OR BSD-3-Clause (2) | moxcms 0.8.1, pxfm 0.1.30 |
+| Unlicense OR MIT (7) | aho-corasick 1.1.5, byteorder 1.5.0, byteorder-lite 0.1.0, memchr 2.8.3, same-file 1.0.6, walkdir 2.5.0, winapi-util 0.1.11 |
 | BSD-3-Clause (2) | alloc-no-stdlib 2.0.4, alloc-stdlib 0.2.4 |
+| BSD-3-Clause OR Apache-2.0 (2) | moxcms 0.8.1, pxfm 0.1.30 |
+| MIT OR Zlib OR Apache-2.0 (2) | miniz_oxide 0.8.9, miniz_oxide 0.9.1 |
+| 0BSD OR MIT OR Apache-2.0 (1) | adler2 2.0.1 |
 | Apache-2.0 (1) | tao 0.35.3 |
 | Apache-2.0 AND MIT (1) | dpi 0.1.2 |
-| Apache-2.0 OR CC0-1.0 OR MIT-0 (1) | dunce 1.0.5 |
 | BSD-3-Clause AND MIT (1) | brotli 8.0.4 |
-| MIT OR Apache-2.0 OR 0BSD (1) | adler2 2.0.1 |
-| MIT OR BSD-3-Clause (1) | brotli-decompressor 5.0.3 |
+| BSD-3-Clause OR MIT (1) | brotli-decompressor 5.0.3 |
+| CC0-1.0 OR MIT-0 OR Apache-2.0 (1) | dunce 1.0.5 |
+| MIT OR Apache-2.0 OR Zlib (1) | raw-window-handle 0.6.2 |
 | MPL-2.0 (1) | option-ext 0.2.0 |
+| Zlib OR Apache-2.0 OR MIT (1) | bytemuck 1.25.2 |
 
 Исходники каждого крейта — на https://crates.io/crates/<имя>.
 
